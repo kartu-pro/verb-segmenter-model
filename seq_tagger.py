@@ -8,6 +8,7 @@ DELIMITER_MAP = {0: "", 1: "-", 2: "--", 3: "---"}
 # 1. VOCABULARY BUILDER & METADATA MAPPING
 # ==========================================
 
+
 def build_vocabularies(df: pd.DataFrame, strategy: str = "boundaries") -> Dict[str, Dict[str, int]]:
     """
     Builds string-to-integer mappings for characters, metadata, and target labels.
@@ -36,14 +37,17 @@ def build_vocabularies(df: pd.DataFrame, strategy: str = "boundaries") -> Dict[s
     all_chars = set("^")
     for form in df["form"].dropna():
         all_chars.update(list(form))
-    
+
     char2id = {"<PAD>": 0, "<UNK>": 1}
     for idx, char in enumerate(sorted(all_chars), start=2):
         char2id[char] = idx
 
-    screeve2id = {val: idx for idx, val in enumerate(sorted(df["screeve"].unique()))}
-    subject2id = {val: idx for idx, val in enumerate(sorted(df["subject"].unique()))}
-    class2id   = {val: idx for idx, val in enumerate(sorted(df["verb_class"].unique()))}
+    screeve2id = {val: idx for idx, val in enumerate(
+        sorted(df["screeve"].unique()))}
+    subject2id = {val: idx for idx, val in enumerate(
+        sorted(df["subject"].unique()))}
+    class2id = {val: idx for idx, val in enumerate(
+        sorted(df["verb_class"].unique()))}
 
     if strategy == "boundaries":
         label2id = {0: 0, 1: 1, 2: 2, 3: 3}
@@ -126,8 +130,18 @@ def decode_bio(tokens: List[str], predicted_bio_tags: List[str]) -> str:
     if current_slot:
         extracted_slots[current_slot] = "".join(current_chars)
 
-    # Missing slots map to "" (empty string). Joining with "-" yields correct hyphens.
-    return "-".join([extracted_slots.get(k, "") for k in SLOT_KEYS])
+    # Find the last non-empty slot
+    active_indices = [i for i, k in enumerate(
+        SLOT_KEYS) if extracted_slots.get(k)]
+    if not active_indices:
+        return ""
+
+    last_active_idx = active_indices[-1]
+
+    # Only include slots up to the last active one
+    slot_values = [extracted_slots.get(SLOT_KEYS[i], "")
+                   for i in range(last_active_idx + 1)]
+    return "-".join(slot_values)
 
 
 # ==========================================
@@ -158,7 +172,7 @@ def encode_boundaries(form: str, attr_dict: dict) -> Tuple[List[str], List[int]]
     """
     chars = ["^"]
     labels = []
-    
+
     slot_indices = [i for i, k in enumerate(SLOT_KEYS) if attr_dict.get(k)]
     if not slot_indices:
         return ["^"] + list(form), [0] * (len(form) + 1)
@@ -171,9 +185,9 @@ def encode_boundaries(form: str, attr_dict: dict) -> Tuple[List[str], List[int]]
     for idx_in_active, slot_idx in enumerate(slot_indices):
         key = SLOT_KEYS[slot_idx]
         val = attr_dict[key]
-        
+
         intermediate_nulls = (
-            slot_indices[idx_in_active + 1] - slot_idx - 1 
+            slot_indices[idx_in_active + 1] - slot_idx - 1
             if idx_in_active < len(slot_indices) - 1 else 0
         )
 
@@ -181,12 +195,12 @@ def encode_boundaries(form: str, attr_dict: dict) -> Tuple[List[str], List[int]]
             chars.append(char)
             is_slot_end = (c_idx == len(val) - 1)
             is_last_slot = (idx_in_active == len(slot_indices) - 1)
-            
+
             if is_slot_end and not is_last_slot:
                 labels.append(min(1 + intermediate_nulls, 3))
             else:
                 labels.append(0)
-                
+
     return chars, labels
 
 
