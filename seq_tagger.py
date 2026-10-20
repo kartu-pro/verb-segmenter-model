@@ -114,7 +114,7 @@ def decode_bio(tokens: List[str], predicted_bio_tags: List[str]) -> str:
     Example Output:
         "--ა-კეთ-ებ-ს"
     """
-    extracted_slots = {}
+    extracted_slots = {k: "" for k in SLOT_KEYS}
     current_slot = None
     current_chars = []
 
@@ -127,21 +127,11 @@ def decode_bio(tokens: List[str], predicted_bio_tags: List[str]) -> str:
         elif tag.startswith("I-") and current_slot == tag[2:].lower():
             current_chars.append(char)
 
-    if current_slot:
+    if current_slot and current_slot in extracted_slots:
         extracted_slots[current_slot] = "".join(current_chars)
 
-    # Find the last non-empty slot
-    active_indices = [i for i, k in enumerate(
-        SLOT_KEYS) if extracted_slots.get(k)]
-    if not active_indices:
-        return ""
-
-    last_active_idx = active_indices[-1]
-
-    # Only include slots up to the last active one
-    slot_values = [extracted_slots.get(SLOT_KEYS[i], "")
-                   for i in range(last_active_idx + 1)]
-    return "-".join(slot_values)
+    # Join all 6 slots in exact order
+    return "-".join([extracted_slots[k] for k in SLOT_KEYS])
 
 
 # ==========================================
