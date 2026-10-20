@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 import torch
 from transformers import (
-    AutoTokenizer, 
-    AutoModelForSeq2SeqLM, 
-    Seq2SeqTrainer, 
+    AutoTokenizer,
+    AutoModelForSeq2SeqLM,
+    Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     DataCollatorForSeq2Seq
 )
@@ -48,7 +48,7 @@ def split_data_by_verb(df: pd.DataFrame, train_ratio: float = 0.8, val_ratio: fl
 def run_training(words_path: str, forms_path: str, mode: str = "single", epochs: int = 5, batch_size: int = 16):
     """Encodes data, tokenizes, and fine-tunes ByT5."""
     print(f"--- Starting Seq2Seq Training (Mode: {mode}) ---")
-    
+
     # 1. Load Data
     raw_df = load.load_and_merge_data(words_path, forms_path)
     train_df, val_df, test_df = split_data_by_verb(raw_df)
@@ -65,22 +65,28 @@ def run_training(words_path: str, forms_path: str, mode: str = "single", epochs:
 
     # Tokenization function
     def preprocess_function(examples):
-        model_inputs = tokenizer(examples["input_text"], max_length=256, truncation=True)
-        labels = tokenizer(text_target=examples["target_text"], max_length=128, truncation=True)
+        model_inputs = tokenizer(
+            examples["input_text"], max_length=256, truncation=True)
+        labels = tokenizer(
+            text_target=examples["target_text"], max_length=128, truncation=True)
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 
-    train_dataset = Dataset.from_pandas(train_encoded).map(preprocess_function, batched=True)
-    val_dataset = Dataset.from_pandas(val_encoded).map(preprocess_function, batched=True)
-    test_dataset = Dataset.from_pandas(test_encoded).map(preprocess_function, batched=True)
+    train_dataset = Dataset.from_pandas(train_encoded).map(
+        preprocess_function, batched=True)
+    val_dataset = Dataset.from_pandas(val_encoded).map(
+        preprocess_function, batched=True)
+    test_dataset = Dataset.from_pandas(test_encoded).map(
+        preprocess_function, batched=True)
 
     # 4. Metrics Compute Function
     def compute_metrics(eval_preds):
         preds, labels = eval_preds
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-        
+
         decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
-        decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+        decoded_labels = tokenizer.batch_decode(
+            labels, skip_special_tokens=True)
 
         return evaluate.evaluate_predictions(decoded_labels, decoded_preds)
 
@@ -113,18 +119,28 @@ def run_training(words_path: str, forms_path: str, mode: str = "single", epochs:
 
     # 6. Train & Evaluate
     trainer.train()
-    
+
     print("\n--- Test Set Evaluation ---")
     test_results = trainer.predict(test_dataset)
     print("Test Metrics:", test_results.metrics)
+
+    # Extract just the core metric floats to match your logger
+    return {
+        "exact_match": test_results.metrics.get("test_exact_match", 0.0),
+        "norm_edit_dist": test_results.metrics.get("test_norm_edit_dist", 0.0),
+        "positional_slot_acc": test_results.metrics.get("test_positional_slot_acc", 0.0),
+        "morpheme_f1": test_results.metrics.get("test_morpheme_f1", 0.0)
+    }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--words_path", type=str, default="words.tsv")
     parser.add_argument("--forms_path", type=str, default="forms.tsv")
-    parser.add_argument("--mode", type=str, choices=["single", "group6"], default="single")
+    parser.add_argument("--mode", type=str,
+                        choices=["single", "group6"], default="single")
     parser.add_argument("--epochs", type=int, default=5)
     args = parser.parse_args()
 
-    run_training(args.words_path, args.forms_path, mode=args.mode, epochs=args.epochs)
+    run_training(args.words_path, args.forms_path,
+                 mode=args.mode, epochs=args.epochs)
