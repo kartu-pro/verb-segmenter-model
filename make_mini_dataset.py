@@ -8,7 +8,7 @@ import argparse
 import pandas as pd
 
 # Default standard regular verbs that have full 6-slot morpheme annotations
-DEFAULT_LEMMAS = ["გაკეთება", "დაწერა", "წაკითხვა", "შენება"]
+DEFAULT_LEMMAS = ["დაწერა"]
 
 
 def create_mini_dataset(
@@ -30,7 +30,8 @@ def create_mini_dataset(
         # Filter by explicitly provided lemmas
         selected = verb_words[verb_words["lemma"].isin(target_lemmas)]
         if selected.empty:
-            print(f"Warning: None of {target_lemmas} found in {words_path}. Falling back to first {num_verbs} verbs.")
+            print(
+                f"Warning: None of {target_lemmas} found in {words_path}. Falling back to first {num_verbs} verbs.")
             verb_word_ids = verb_words["word_id"].unique()[:num_verbs]
         else:
             verb_word_ids = selected["word_id"].unique()
@@ -59,7 +60,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--words_path", type=str, default="words.tsv")
     parser.add_argument("--forms_path", type=str, default="forms.tsv")
-    parser.add_argument("--lemmas", nargs="+", default=None, help="Specific lemmas to include (e.g. --lemmas გაკეთება დაწერა)")
+    parser.add_argument("--lemmas", nargs="+", default=None,
+                        help="Specific lemmas to include (e.g. --lemmas გაკეთება დაწერა)")
     parser.add_argument("--num_verbs", type=int, default=4)
     args = parser.parse_args()
 

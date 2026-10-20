@@ -1,5 +1,2 @@
 word_id	lemma	pos	attributes
-b444a3c2-47c3-461a-9421-30e9e234c539	გაკეთება	verb	"{""source"":""kartudb"",""translation"":""do, make""}"
 02bd97dc-26ab-4d17-96f1-7366a736c602	დაწერა	verb	"{""source"":""kartudb"",""verb_class"":1,""translation"":""write""}"
-49d2ffe9-1492-4e62-96bf-b57ffaa69b8c	წაკითხვა	verb	"{""verb_class"":1,""translation"":""read""}"
-1e059e90-48a4-4bd8-8cb6-e60f360fac77	შენება	verb	"{""translation"":""building, construction""}"
