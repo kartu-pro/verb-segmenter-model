@@ -93,7 +93,7 @@ def run_training(words_path: str, forms_path: str, mode: str = "single", epochs:
     # 5. Training Arguments
     training_args = Seq2SeqTrainingArguments(
         output_dir=f"./results_seq2seq_{mode}",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         learning_rate=5e-4,
         per_device_train_batch_size=batch_size,
