@@ -1,10 +1,14 @@
 """
 test_local.py
 -------------
-Lightweight local verification script. Tests data parsing, encoding strategies,
-decoders, and evaluation metrics without needing PyTorch or HuggingFace.
+Comprehensive local verification and smoke test script. 
+1. Runs a syntax/compile check across all core python modules.
+2. Tests data parsing, encoding strategies, decoders, and evaluation metrics.
+3. Tests training argument compatibility without requiring heavy GPU runs.
 """
 
+import py_compile
+import sys
 import load
 import seq_2_seq
 import seq_tagger
@@ -13,18 +17,42 @@ import evaluate
 
 def run_smoke_test():
     print("=" * 60)
-    print("RUNNING LOCAL SMOKE TEST")
+    print("RUNNING LOCAL SMOKE TEST & VERIFICATION SUITE")
     print("=" * 60)
 
+    # 0. Test Syntax & Compilation (Catches typos/syntax errors early)
+    print("\n[0/6] Running Python Compilation Check (py_compile)...")
+    modules_to_check = [
+        "load.py",
+        "seq_2_seq.py",
+        "seq_tagger.py",
+        "evaluate.py",
+        "train_seqtagger.py",
+        "train_seq2seq.py",
+        "experiments.py"
+    ]
+
+    compilation_failed = False
+    for mod in modules_to_check:
+        try:
+            py_compile.compile(mod, doraise=True)
+            print(f"  ✓ Compiled successfully: {mod}")
+        except Exception as e:
+            print(f"  ❌ Compilation error in {mod}: {e}")
+            compilation_failed = True
+
+    if compilation_failed:
+        print("\n❌ STOPPING: Fix compilation/syntax errors before proceeding.")
+        sys.exit(1)
+
     # 1. Test Data Loading
-    print("\n[1/5] Testing load.py...")
+    print("\n[1/6] Testing load.py...")
     df = load.load_and_merge_data("words_mini.tsv", "forms_mini.tsv")
     print(
         f"  ✓ Loaded {len(df)} forms across {df['word_id'].nunique()} verb lemmas.")
 
     # 2. Test Seq2Seq Encoding & Decoding
-    print("\n[2/5] Testing seq_2_seq.py...")
-    # Single mode
+    print("\n[2/6] Testing seq_2_seq.py...")
     s2s_single = seq_2_seq.encode(df, mode="single")
     sample_single_input = s2s_single.iloc[0]["input_text"]
     sample_single_target = s2s_single.iloc[0]["target_text"]
@@ -33,7 +61,6 @@ def run_smoke_test():
     print(f"  ✓ Single Target: {sample_single_target}")
     print(f"  ✓ Decoded:       {decoded_single[0]}")
 
-    # Group6 mode
     s2s_group6 = seq_2_seq.encode(df, mode="group6")
     sample_g6_input = s2s_group6.iloc[0]["input_text"]
     sample_g6_target = s2s_group6.iloc[0]["target_text"]
@@ -42,7 +69,7 @@ def run_smoke_test():
     print(f"  ✓ Group6 Target Count: {len(decoded_g6)} forms")
 
     # 3. Test Sequence Tagger (Boundaries Strategy)
-    print("\n[3/5] Testing seq_tagger.py (Boundaries Strategy)...")
+    print("\n[3/6] Testing seq_tagger.py (Boundaries Strategy)...")
     bound_df = seq_tagger.encode(df, strategy="boundaries")
     vocabs_bound = seq_tagger.build_vocabularies(df, strategy="boundaries")
     bound_ids_df = seq_tagger.encode_with_ids(
@@ -59,7 +86,7 @@ def run_smoke_test():
     print(f"  ✓ Token IDs:     {bound_ids_df.iloc[0]['token_ids']}")
 
     # 4. Test Sequence Tagger (BIO Strategy)
-    print("\n[4/5] Testing seq_tagger.py (BIO Strategy)...")
+    print("\n[4/6] Testing seq_tagger.py (BIO Strategy)...")
     bio_df = seq_tagger.encode(df, strategy="bio")
     vocabs_bio = seq_tagger.build_vocabularies(df, strategy="bio")
     bio_ids_df = seq_tagger.encode_with_ids(df, vocabs_bio, strategy="bio")
@@ -74,8 +101,7 @@ def run_smoke_test():
     print(f"  ✓ Decoded:       {decoded_bio}")
 
     # 5. Test Evaluation Metrics
-    # 5. Test Evaluation Metrics
-    print("\n[5/5] Testing evaluate.py...")
+    print("\n[5/6] Testing evaluate.py...")
     gold_targets = [
         "-".join([df.iloc[i]["form_attr"].get(k, "") for k in load.SLOT_KEYS])
         for i in range(len(df))
@@ -85,14 +111,29 @@ def run_smoke_test():
     perfect_metrics = evaluate.evaluate_predictions(gold_targets, gold_targets)
     print(f"  ✓ Perfect Match Metrics: {perfect_metrics}")
 
-    # Gold vs Realistic Corrupted targets (e.g., substituting root characters)
+    # Gold vs Realistic Corrupted targets (Testing partial Levenshtein and slot F1)
     corrupted_targets = [g.replace("წერ", "ცერ") for g in gold_targets]
     imperfect_metrics = evaluate.evaluate_predictions(
         gold_targets, corrupted_targets)
     print(f"  ✓ Imperfect Match Metrics: {imperfect_metrics}")
 
+    # 6. Test Training Arguments Initialization (Optional local check)
+    print("\n[6/6] Testing Training Arguments Compatibility...")
+    try:
+        from transformers import Seq2SeqTrainingArguments
+        args = Seq2SeqTrainingArguments(
+            output_dir="./test_output",
+            eval_strategy="epoch"
+        )
+        print("  ✓ Seq2SeqTrainingArguments initialized successfully with 'eval_strategy'.")
+    except ImportError:
+        print("  ℹ️ 'transformers' not installed locally. Skipping training args test (will run in Colab).")
+    except Exception as e:
+        print(f"  ❌ Seq2SeqTrainingArguments initialization failed: {e}")
+        sys.exit(1)
+
     print("\n" + "=" * 60)
-    print("SUCCESS: ALL PIPELINES, ENCODERS, AND DECODERS FUNCTIONING CORRECTLY!")
+    print("SUCCESS: ALL CODE, SYNTAX, ENCODERS, AND EVALUATORS PASSED LOCALLY!")
     print("=" * 60)
 
 
