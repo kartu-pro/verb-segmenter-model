@@ -9,6 +9,7 @@ Integrates:
   - Supports 'boundaries' and 'bio' strategies.
 """
 
+import time
 import argparse
 import numpy as np
 import pandas as pd
@@ -116,13 +117,20 @@ class BiLSTMMetadataTagger(nn.Module):
 # 3. TRAINING LOOP
 # ==========================================
 
-def run_training(words_path: str, forms_path: str, strategy: str = "boundaries", epochs: int = 10, batch_size: int = 32):
+def run_training(words_path: str, forms_path: str, strategy: str = "boundaries", epochs: int = 10, batch_size: int = 32, max_samples: int = None):
+    start_time = time.time()
     print(f"--- Starting Sequence Tagger Training (Strategy: {strategy}) ---")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # 1. Load Data & Build Vocabularies
     raw_df = load.load_and_merge_data(words_path, forms_path)
+
+    # Optional: Truncate for super fast smoke testing
+    if max_samples:
+        raw_df = raw_df.head(max_samples)
+        print(
+            f"⚠️ [Fast Mode] Truncated dataset to {max_samples} samples for quick verification.")
 
     # Split by verb
     unique_words = raw_df["word_id"].unique()
@@ -218,6 +226,8 @@ def run_training(words_path: str, forms_path: str, strategy: str = "boundaries",
 
     gold_strings = test_df["segmented_target"].tolist()
     metrics = evaluate.evaluate_predictions(gold_strings, pred_strings)
+    elapsed_time = time.time() - start_time
+    metrics["training_time_sec"] = round(elapsed_time, 1)
     print("\n--- Test Set Evaluation ---")
     print(metrics)
     return metrics

@@ -21,7 +21,7 @@ def init_tracking():
     print("Initialized experiment tracking container.")
 
 
-def log_experiment(model_name: str, strategy_mode: str, metrics: dict, training_time_sec: float):
+def log_experiment(model_name: str, strategy_mode: str, metrics: dict):
     """Appends a completed experiment result to the semi-persistent JSON file."""
     row = {
         "Model Architecture": model_name,
@@ -30,7 +30,7 @@ def log_experiment(model_name: str, strategy_mode: str, metrics: dict, training_
         "Norm Edit Dist": metrics.get("norm_edit_dist", 0.0),
         "Slot Accuracy (%)": metrics.get("positional_slot_acc", 0.0),
         "Morpheme F1 (%)": metrics.get("morpheme_f1", 0.0),
-        "Training Time (s)": round(training_time_sec, 1)
+        "Training Time (s)": metrics.get("training_time_sec", 0.0)
     }
 
     # Load existing, append, and save back (semi-persistent across cell runs)

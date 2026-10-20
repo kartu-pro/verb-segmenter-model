@@ -7,6 +7,7 @@ Supports both 'single' word and 'group6' paradigm prompt modes.
 Runs verb-grouped train/val/test splits to avoid data leakage.
 """
 
+import time
 import argparse
 import numpy as np
 import pandas as pd
@@ -45,12 +46,19 @@ def split_data_by_verb(df: pd.DataFrame, train_ratio: float = 0.8, val_ratio: fl
     return train_df, val_df, test_df
 
 
-def run_training(words_path: str, forms_path: str, mode: str = "single", epochs: int = 5, batch_size: int = 16):
+def run_training(words_path: str, forms_path: str, mode: str = "single", epochs: int = 5, batch_size: int = 16, max_samples: int = None):
     """Encodes data, tokenizes, and fine-tunes ByT5."""
+    start_time = time.time()
     print(f"--- Starting Seq2Seq Training (Mode: {mode}) ---")
 
     # 1. Load Data
     raw_df = load.load_and_merge_data(words_path, forms_path)
+    # Optional: Truncate for super fast smoke testing
+    if max_samples:
+        raw_df = raw_df.head(max_samples)
+        print(
+            f"⚠️ [Fast Mode] Truncated dataset to {max_samples} samples for quick verification.")
+
     train_df, val_df, test_df = split_data_by_verb(raw_df)
 
     # 2. Encode to Prompts
@@ -122,6 +130,7 @@ def run_training(words_path: str, forms_path: str, mode: str = "single", epochs:
 
     print("\n--- Test Set Evaluation ---")
     test_results = trainer.predict(test_dataset)
+    elapsed_time = time.time() - start_time
     print("Test Metrics:", test_results.metrics)
 
     # Extract just the core metric floats to match your logger
@@ -129,7 +138,8 @@ def run_training(words_path: str, forms_path: str, mode: str = "single", epochs:
         "exact_match": test_results.metrics.get("test_exact_match", 0.0),
         "norm_edit_dist": test_results.metrics.get("test_norm_edit_dist", 0.0),
         "positional_slot_acc": test_results.metrics.get("test_positional_slot_acc", 0.0),
-        "morpheme_f1": test_results.metrics.get("test_morpheme_f1", 0.0)
+        "morpheme_f1": test_results.metrics.get("test_morpheme_f1", 0.0),
+        "training_time_sec": round(elapsed_time, 1)
     }
 
 
