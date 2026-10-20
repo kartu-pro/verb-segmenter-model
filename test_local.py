@@ -19,7 +19,8 @@ def run_smoke_test():
     # 1. Test Data Loading
     print("\n[1/5] Testing load.py...")
     df = load.load_and_merge_data("words_mini.tsv", "forms_mini.tsv")
-    print(f"  ✓ Loaded {len(df)} forms across {df['word_id'].nunique()} verb lemmas.")
+    print(
+        f"  ✓ Loaded {len(df)} forms across {df['word_id'].nunique()} verb lemmas.")
 
     # 2. Test Seq2Seq Encoding & Decoding
     print("\n[2/5] Testing seq_2_seq.py...")
@@ -44,11 +45,13 @@ def run_smoke_test():
     print("\n[3/5] Testing seq_tagger.py (Boundaries Strategy)...")
     bound_df = seq_tagger.encode(df, strategy="boundaries")
     vocabs_bound = seq_tagger.build_vocabularies(df, strategy="boundaries")
-    bound_ids_df = seq_tagger.encode_with_ids(df, vocabs_bound, strategy="boundaries")
+    bound_ids_df = seq_tagger.encode_with_ids(
+        df, vocabs_bound, strategy="boundaries")
 
     sample_toks = bound_df.iloc[0]["tokens"]
     sample_lbls = bound_df.iloc[0]["labels"]
-    decoded_bound = seq_tagger.decode(sample_toks, sample_lbls, strategy="boundaries")
+    decoded_bound = seq_tagger.decode(
+        sample_toks, sample_lbls, strategy="boundaries")
 
     print(f"  ✓ Tokens:        {sample_toks}")
     print(f"  ✓ Boundary IDs:  {sample_lbls}")
@@ -63,23 +66,29 @@ def run_smoke_test():
 
     sample_bio_toks = bio_df.iloc[0]["tokens"]
     sample_bio_lbls = bio_df.iloc[0]["labels"]
-    decoded_bio = seq_tagger.decode(sample_bio_toks, sample_bio_lbls, strategy="bio")
+    decoded_bio = seq_tagger.decode(
+        sample_bio_toks, sample_bio_lbls, strategy="bio")
 
     print(f"  ✓ Tokens:        {sample_bio_toks}")
     print(f"  ✓ BIO Tags:      {sample_bio_lbls}")
     print(f"  ✓ Decoded:       {decoded_bio}")
 
     # 5. Test Evaluation Metrics
+    # 5. Test Evaluation Metrics
     print("\n[5/5] Testing evaluate.py...")
-    gold_targets = df["segmented_target"].tolist()
-    
+    gold_targets = [
+        "-".join([df.iloc[i]["form_attr"].get(k, "") for k in load.SLOT_KEYS])
+        for i in range(len(df))
+    ]
+
     # Gold vs Gold (Expect 100% exact match)
     perfect_metrics = evaluate.evaluate_predictions(gold_targets, gold_targets)
     print(f"  ✓ Perfect Match Metrics: {perfect_metrics}")
 
-    # Gold vs Corrupted targets (Test Levenshtein and slot F1)
-    corrupted_targets = [g.replace("-", "") for g in gold_targets]
-    imperfect_metrics = evaluate.evaluate_predictions(gold_targets, corrupted_targets)
+    # Gold vs Realistic Corrupted targets (e.g., substituting root characters)
+    corrupted_targets = [g.replace("წერ", "ცერ") for g in gold_targets]
+    imperfect_metrics = evaluate.evaluate_predictions(
+        gold_targets, corrupted_targets)
     print(f"  ✓ Imperfect Match Metrics: {imperfect_metrics}")
 
     print("\n" + "=" * 60)
