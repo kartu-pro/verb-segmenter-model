@@ -139,7 +139,7 @@ def run_training(
         eval_strategy=eval_strategy,
         eval_steps=eval_steps if eval_strategy == "steps" else None,
         save_strategy=save_strategy,
-        learning_rate=1e-4,  # Safer learning rate to prevent NaN loss
+        learning_rate=1e-4,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         weight_decay=0.01,
@@ -163,8 +163,21 @@ def run_training(
     )
 
     # 6. Train & Evaluate
-    # (Automatically resumes if a checkpoint exists, otherwise starts fresh from scratch)
-    trainer.train(resume_from_checkpoint=True)
+    # (Safely checks for checkpoints, skips for smoke tests)
+    from transformers.trainer_utils import get_last_checkpoint
+
+    checkpoint_to_resume = None
+    if not smoke_test:
+        checkpoint_to_resume = get_last_checkpoint(training_args.output_dir)
+        if checkpoint_to_resume:
+            print(
+                f"🔄 Resuming training from checkpoint: {checkpoint_to_resume}")
+        else:
+            print("🚀 No checkpoint found. Starting fresh training run.")
+    else:
+        print("🧪 Smoke test mode: Running fresh training (ignoring checkpoints).")
+
+    trainer.train(resume_from_checkpoint=checkpoint_to_resume)
 
     test_metrics = {}
     if eval_strategy != "no":
