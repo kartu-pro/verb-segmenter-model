@@ -53,7 +53,7 @@ def run_training(
     epochs: int = 5,
     batch_size: int = 16,
     max_samples: int = None,
-    model_name: str = "google/t5-small",
+    model_name: str = "google/byt5-small",
     smoke_test: bool = False
 ):
     """Encodes data, tokenizes, and fine-tunes Seq2Seq models."""
@@ -178,7 +178,7 @@ if __name__ == "__main__":
                         choices=["single", "group6"], default="single")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--max_samples", type=int, default=None)
-    parser.add_argument("--model_name", type=str, default="google/t5-small")
+    parser.add_argument("--model_name", type=str, default="google/byt5-small")
     parser.add_argument("--smoke_test", action="store_true",
                         help="Run a quick local/Colab check")
     args = parser.parse_args()
