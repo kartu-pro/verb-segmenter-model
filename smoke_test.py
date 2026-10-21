@@ -153,7 +153,7 @@ def run_smoke_test():
                 forms_path="forms_mini.tsv",
                 mode="single",
                 epochs=1,
-                max_samples=100,
+                max_samples=300,
                 model_name="google/byt5-small",
                 smoke_test=True
             )
