@@ -120,6 +120,9 @@ def run_training(
     # 4. Metrics Compute Function
     def compute_metrics(eval_preds):
         preds, labels = eval_preds
+
+        # Replace -100 with pad_token_id in BOTH preds and labels
+        preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
         decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
