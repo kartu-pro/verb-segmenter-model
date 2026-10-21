@@ -149,8 +149,8 @@ def run_smoke_test():
         print("  🚀 Google Colab environment detected! Running google/byt5-small training smoke test...")
         try:
             train_seq2seq.run_training(
-                words_path="words_mini.tsv",
-                forms_path="forms_mini.tsv",
+                words_path="words.tsv",
+                forms_path="forms.tsv",
                 mode="single",
                 epochs=1,
                 max_samples=300,
