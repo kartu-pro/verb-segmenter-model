@@ -150,6 +150,7 @@ def run_training(
         bf16=torch.cuda.is_available(),
         fp16=False,
         logging_steps=logging_steps,
+        disable_tqdm=True,
         report_to="none"
     )
 
