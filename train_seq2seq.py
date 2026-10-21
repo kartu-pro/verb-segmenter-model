@@ -47,12 +47,12 @@ def split_data_by_verb(df: pd.DataFrame, train_ratio: float = 0.8, val_ratio: fl
 
 
 def run_training(
-    words_path: str,
-    forms_path: str,
-    mode: str = "single",
-    epochs: int = 5,
-    batch_size: int = 16,
-    max_samples: int = None,
+    words_path: str, 
+    forms_path: str, 
+    mode: str = "single", 
+    epochs: int = 5, 
+    batch_size: int = 16, 
+    max_samples: int = None, 
     model_name: str = "google/byt5-small",
     smoke_test: bool = False
 ):
@@ -79,10 +79,13 @@ def run_training(
     raw_df = load.load_and_merge_data(words_path, forms_path)
     if max_samples:
         raw_df = raw_df.head(max_samples)
-        print(
-            f"⚠️ Truncated dataset to {max_samples} samples for verification.")
+        print(f"⚠️ Truncated dataset to {max_samples} samples for verification.")
 
     train_df, val_df, test_df = split_data_by_verb(raw_df)
+    
+    print(f"Train DF — Rows: {len(train_df)}, Unique words: {train_df['word_id'].nunique()}")
+    print(f"Val DF   — Rows: {len(val_df)}, Unique words: {val_df['word_id'].nunique()}")
+    print(f"Test DF  — Rows: {len(test_df)}, Unique words: {test_df['word_id'].nunique()}")
 
     # 2. Encode to Prompts
     train_encoded = seq_2_seq.encode(train_df, mode=mode)
@@ -174,13 +177,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--words_path", type=str, default="words.tsv")
     parser.add_argument("--forms_path", type=str, default="forms.tsv")
-    parser.add_argument("--mode", type=str,
-                        choices=["single", "group6"], default="single")
+    parser.add_argument("--mode", type=str, choices=["single", "group6"], default="single")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--max_samples", type=int, default=None)
     parser.add_argument("--model_name", type=str, default="google/byt5-small")
-    parser.add_argument("--smoke_test", action="store_true",
-                        help="Run a quick local/Colab check")
+    parser.add_argument("--smoke_test", action="store_true", help="Run a quick local/Colab check")
     args = parser.parse_args()
 
     run_training(
