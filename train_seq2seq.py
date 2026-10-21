@@ -63,14 +63,16 @@ def run_training(
     # Handle smoke test overrides
     if smoke_test:
         print("⚠️ [Smoke Test Mode Enabled]")
-        eval_strategy = "no"
         save_strategy = "no"
+        eval_strategy = "steps"   # Turn evaluation ON so we test compute_metrics!
+        eval_steps = 10           # Run evaluation at step 10 and step 20
         logging_steps = 1
         max_steps = 20
         if max_samples is None:
             max_samples = 300
     else:
         eval_strategy = "epoch"
+        eval_steps = None
         save_strategy = "epoch"
         logging_steps = 100
         max_steps = -1
@@ -135,6 +137,7 @@ def run_training(
     training_args = Seq2SeqTrainingArguments(
         output_dir=f"./results_seq2seq_{mode}",
         eval_strategy=eval_strategy,
+        eval_steps=eval_steps if eval_strategy == "steps" else None,
         save_strategy=save_strategy,
         learning_rate=1e-4,  # Safer learning rate to prevent NaN loss
         per_device_train_batch_size=batch_size,
