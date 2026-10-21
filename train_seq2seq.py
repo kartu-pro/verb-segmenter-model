@@ -147,7 +147,8 @@ def run_training(
         num_train_epochs=epochs,
         max_steps=max_steps,
         predict_with_generate=True,
-        fp16=torch.cuda.is_available(),
+        bf16=torch.cuda.is_available(),
+        fp16=False,
         logging_steps=logging_steps,
         report_to="none"
     )
