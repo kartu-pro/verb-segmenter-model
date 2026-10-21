@@ -177,6 +177,13 @@ def run_training(
     else:
         print("🧪 Smoke test mode: Running fresh training (ignoring checkpoints).")
 
+    # Inspect a single batch from the data collator to check if labels are all -100
+    sample_batch = next(iter(trainer.get_train_dataloader()))
+    print("Input IDs shape:", sample_batch["input_ids"].shape)
+    print("Labels shape:", sample_batch["labels"].shape)
+    # Should NOT be all -100
+    print("Sample label tokens:", sample_batch["labels"][0][:20])
+
     trainer.train(resume_from_checkpoint=checkpoint_to_resume)
 
     test_metrics = {}
