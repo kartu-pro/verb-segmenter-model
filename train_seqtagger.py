@@ -2,157 +2,22 @@
 train_seqtagger.py
 ------------------
 Unified PyTorch training pipeline for Sequence Tagging models (Standard BiLSTM & BiLSTM-CRF).
-
-Integrates:
-  - Character Embeddings + Metadata Embeddings (screeve, subject, verb_class).
-  - BiLSTM sequence encoder + Optional Linear-Chain CRF output layer.
-  - Supports 'boundaries' and 'bio' strategies via command line flags.
 """
 
 import time
-import json
 import argparse
-import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from torchcrf import CRF
+from torch.utils.data import DataLoader
 
 import load
 import seq_tagger
 import evaluate
 import experiments
 from utils import split_data_by_verb
+from tagger_models import BiLSTMMetadataTagger, BiLSTMMetadataTaggerWithCRF
+from tagger_datasets import GeorgianTaggingDataset, get_collate_fn
 
-
-# ==========================================
-# 1. PYTORCH DATASET & COLLATOR
-# ==========================================
-
-class GeorgianTaggingDataset(Dataset):
-    """PyTorch Dataset wrapping encoded integer IDs."""
-
-    def __init__(self, encoded_df: pd.DataFrame):
-        if "token_ids" in encoded_df.columns:
-            encoded_df = encoded_df[encoded_df["token_ids"].apply(
-                lambda x: len(x) > 0)].reset_index(drop=True)
-        elif "seq_len" in encoded_df.columns:
-            encoded_df = encoded_df[encoded_df["seq_len"] > 0].reset_index(drop=True)
-
-        self.data = encoded_df.to_dict(orient="records")
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        item = self.data[idx]
-        return {
-            "token_ids": torch.tensor(item["token_ids"], dtype=torch.long),
-            "label_ids": torch.tensor(item["label_ids"], dtype=torch.long),
-            "screeve_id": torch.tensor(item["screeve_id"], dtype=torch.long),
-            "subject_id": torch.tensor(item["subject_id"], dtype=torch.long),
-            "class_id": torch.tensor(item["class_id"], dtype=torch.long),
-            "seq_len": item["seq_len"]
-        }
-
-
-def get_collate_fn(use_crf: bool):
-    """Returns a collate function configured for standard CrossEntropy or CRF padding labels."""
-    label_pad_value = 0 if use_crf else -100
-
-    def pad_collate_fn(batch):
-        token_ids = [b["token_ids"] for b in batch]
-        label_ids = [b["label_ids"] for b in batch]
-
-        padded_tokens = nn.utils.rnn.pad_sequence(
-            token_ids, batch_first=True, padding_value=0)
-        padded_labels = nn.utils.rnn.pad_sequence(
-            label_ids, batch_first=True, padding_value=label_pad_value)
-
-        screeve_ids = torch.stack([b["screeve_id"] for b in batch])
-        subject_ids = torch.stack([b["subject_id"] for b in batch])
-        class_ids = torch.stack([b["class_id"] for b in batch])
-
-        return {
-            "tokens": padded_tokens,
-            "labels": padded_labels,
-            "screeve_id": screeve_ids,
-            "subject_id": subject_ids,
-            "class_id": class_ids
-        }
-    return pad_collate_fn
-
-
-# ==========================================
-# 2. MODEL DEFINITIONS (Standard & CRF)
-# ==========================================
-
-class BiLSTMMetadataTagger(nn.Module):
-    """BiLSTM Model with metadata feature concatenation."""
-
-    def __init__(self, vocabs: dict, char_dim: int = 64, meta_dim: int = 16, hidden_dim: int = 128):
-        super().__init__()
-        self.char_embed = nn.Embedding(len(vocabs["char2id"]), char_dim, padding_idx=0)
-        self.screeve_embed = nn.Embedding(len(vocabs["screeve2id"]), meta_dim)
-        self.subject_embed = nn.Embedding(len(vocabs["subject2id"]), meta_dim)
-        self.class_embed = nn.Embedding(len(vocabs["class2id"]), meta_dim)
-
-        input_dim = char_dim + (meta_dim * 3)
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=True)
-        self.fc = nn.Linear(hidden_dim * 2, len(vocabs["label2id"]))
-
-    def forward(self, tokens, screeve_id, subject_id, class_id):
-        batch_size, seq_len = tokens.shape
-        c_emb = self.char_embed(tokens)
-        s_emb = self.screeve_embed(screeve_id).unsqueeze(1).expand(-1, seq_len, -1)
-        subj_emb = self.subject_embed(subject_id).unsqueeze(1).expand(-1, seq_len, -1)
-        cls_emb = self.class_embed(class_id).unsqueeze(1).expand(-1, seq_len, -1)
-
-        combined = torch.cat([c_emb, s_emb, subj_emb, cls_emb], dim=-1)
-        lstm_out, _ = self.lstm(combined)
-        logits = self.fc(lstm_out)
-        return logits
-
-
-class BiLSTMMetadataTaggerWithCRF(nn.Module):
-    """BiLSTM Model with metadata feature concatenation and CRF output layer."""
-
-    def __init__(self, vocabs: dict, char_dim: int = 64, meta_dim: int = 16, hidden_dim: int = 128):
-        super().__init__()
-        self.char_embed = nn.Embedding(len(vocabs["char2id"]), char_dim, padding_idx=0)
-        self.screeve_embed = nn.Embedding(len(vocabs["screeve2id"]), meta_dim)
-        self.subject_embed = nn.Embedding(len(vocabs["subject2id"]), meta_dim)
-        self.class_embed = nn.Embedding(len(vocabs["class2id"]), meta_dim)
-
-        input_dim = char_dim + (meta_dim * 3)
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=True)
-        self.fc = nn.Linear(hidden_dim * 2, len(vocabs["label2id"]))
-        self.crf = CRF(len(vocabs["label2id"]), batch_first=True)
-
-    def forward(self, tokens, screeve_id, subject_id, class_id, labels=None, mask=None):
-        batch_size, seq_len = tokens.shape
-        c_emb = self.char_embed(tokens)
-        s_emb = self.screeve_embed(screeve_id).unsqueeze(1).expand(-1, seq_len, -1)
-        subj_emb = self.subject_embed(subject_id).unsqueeze(1).expand(-1, seq_len, -1)
-        cls_emb = self.class_embed(class_id).unsqueeze(1).expand(-1, seq_len, -1)
-
-        combined = torch.cat([c_emb, s_emb, subj_emb, cls_emb], dim=-1)
-        lstm_out, _ = self.lstm(combined)
-        emissions = self.fc(lstm_out)
-
-        if mask is None:
-            mask = (tokens != 0)
-
-        if labels is not None:
-            return -self.crf(emissions, labels, mask=mask, reduction='mean')
-        else:
-            return self.crf.decode(emissions, mask=mask)
-
-
-# ==========================================
-# 3. TRAINING LOOP
-# ==========================================
 
 def run_training(
     words_path: str = "words.tsv",
