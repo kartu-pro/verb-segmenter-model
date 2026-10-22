@@ -269,13 +269,14 @@ def run_training(
                 "epoch": epoch,
                 "val_f1": best_f1,
             }
-            torch.save(checkpoint, f"model_tagger_{strategy}.pt")
+            torch.save(checkpoint, f"model_tagger_crf_{strategy}.pt")
             print(
                 f"💾 [Checkpoint] Saved new best CRF model with Val Morpheme F1: {best_f1:.4f} at epoch {epoch}")
 
     # 5. Final Test Set Evaluation (Using the Best Saved Checkpoint)
     print("\n--- Loading Best Checkpoint for Test Set Evaluation ---")
-    checkpoint = torch.load(f"model_tagger_{strategy}.pt", map_location=device)
+    checkpoint = torch.load(
+        f"model_tagger_crf_{strategy}.pt", map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
@@ -309,10 +310,10 @@ def run_training(
         input_texts,
         gold_strings,
         test_pred_strings,
-        output_path=f"error_analysis_tagger_{strategy}_crf.csv",
+        output_path=f"error_analysis_tagger_crf_{strategy}_crf.csv",
     )
 
-    with open(f"./results_tagger_{strategy}_crf_history.json", "w") as f:
+    with open(f"./results_tagger_crf_{strategy}_crf_history.json", "w") as f:
         json.dump(history, f, indent=4)
     experiments.log_experiment("BiLSTM-Meta-CRF", strategy, metrics)
 
