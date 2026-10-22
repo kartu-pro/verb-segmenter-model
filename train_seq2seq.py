@@ -26,6 +26,82 @@ import seq_2_seq
 import evaluate
 import experiments
 
+import os
+import shutil
+import glob
+from transformers import TrainerCallback
+
+
+def restore_latest_checkpoint_from_drive(output_dir, drive_base_dir="/content/drive/MyDrive/GeorgianVerbSegmentation_Models"):
+    """Copies the latest saved checkpoint from Drive back to local runtime if local is empty."""
+    local_output_path = output_dir
+    os.makedirs(local_output_path, exist_ok=True)
+
+    # Check if local runtime already has checkpoints
+    existing_local_ckpts = glob.glob(os.path.join(output_dir, "checkpoint-*"))
+    if existing_local_ckpts:
+        return  # Local already has it, no need to copy
+
+    # Look for checkpoints in Google Drive
+    drive_output_dir = os.path.join(
+        drive_base_dir, os.path.basename(output_dir))
+    if not os.path.exists(drive_output_dir):
+        return
+
+    drive_ckpts = [os.path.join(drive_output_dir, d) for d in os.listdir(drive_output_dir) if d.startswith(
+        "checkpoint-") and os.path.isdir(os.path.join(drive_output_dir, d))]
+    if not drive_ckpts:
+        return
+
+    # Find the latest checkpoint in Drive based on step number or modification time
+    latest_drive_ckpt = max(drive_ckpts, key=os.path.getmtime)
+    ckpt_name = os.path.basename(latest_drive_ckpt)
+
+    local_target_ckpt = os.path.join(local_output_path, ckpt_name)
+
+    print(
+        f"🔄 [Drive Restore] Found checkpoint in Drive ({ckpt_name}). Copying to local runtime...")     shutil.copytree(latest_drive_ckpt, local_target_ckpt, dirs_exist_ok=True)
+
+
+def backup_latest_checkpoint_to_drive(output_dir, drive_base_dir="/content/drive/MyDrive/GeorgianVerbSegmentation_Models"):
+    """Copies the latest checkpoint folder directly to Google Drive for safe resumption."""
+    if not os.path.exists("/content/drive"):
+        return
+
+    # Find all checkpoint folders in the output directory (e.g., checkpoint-500)
+    checkpoints = [os.path.join(output_dir, d) for d in os.listdir(output_dir) if d.startswith(
+        "checkpoint-") and os.path.isdir(os.path.join(output_dir, d))]
+    if not checkpoints:
+        return
+
+    # Get the latest checkpoint based on modification time or step number
+    latest_ckpt = max(checkpoints, key=os.path.getmtime)
+    ckpt_name = os.path.basename(latest_ckpt)
+
+    target_dir = os.path.join(
+        drive_base_dir, os.path.basename(output_dir), ckpt_name)
+    os.makedirs(target_dir, exist_ok=True)
+
+    print(f"\n☁️ [Drive Backup] Copying {ckpt_name} to Google Drive...")
+
+    # Copy all files in the checkpoint directory (including optimizer.pt, trainer_state.json, etc.)
+    for item in os.listdir(latest_ckpt):
+        s_item = os.path.join(latest_ckpt, item)
+        d_item = os.path.join(target_dir, item)
+        if os.path.isdir(s_item):
+            shutil.copytree(s_item, d_item, dirs_exist_ok=True)
+        else:
+            shutil.copy2(s_item, d_item)
+
+    print(f"  ✓ Successfully backed up {ckpt_name} to Drive!")
+
+
+class DriveCheckpointCallback(TrainerCallback):
+    """Custom Hugging Face callback to trigger a Drive backup after each epoch/save."""
+
+    def on_save(self, args, state, control, **kwargs):
+        backup_latest_checkpoint_to_drive(args.output_dir)
+
 
 def split_data_by_verb(df: pd.DataFrame, train_ratio: float = 0.8, val_ratio: float = 0.1, seed: int = 42):
     """Splits dataset by verb_id / lemma to prevent data leakage."""
@@ -162,13 +238,18 @@ def run_training(
         eval_dataset=val_dataset if eval_strategy != "no" else None,
         processing_class=tokenizer,
         data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
-        compute_metrics=compute_metrics if eval_strategy != "no" else None
+        compute_metrics=compute_metrics if eval_strategy != "no" else None,
+        callbacks=[DriveCheckpointCallback()]
     )
 
     # 6. Train & Evaluate
     # (Safely checks for checkpoints, skips for smoke tests)
     from transformers.trainer_utils import get_last_checkpoint
 
+    restore_latest_checkpoint_from_drive(training_args.output_dir)
+
+# Restore from Drive if local runtime was wiped out
+    restore_latest_checkpoint_from_drive(training_args.output_dir)
     checkpoint_to_resume = None
     if not smoke_test:
         checkpoint_to_resume = get_last_checkpoint(training_args.output_dir)
@@ -248,4 +329,5 @@ if __name__ == "__main__":
         max_samples=args.max_samples,
         model_name=args.model_name,
         smoke_test=args.smoke_test
+    )
     )
