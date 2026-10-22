@@ -146,8 +146,7 @@ def run_training(
     # Optional: Truncate for super fast smoke testing
     if max_samples:
         raw_df = raw_df.head(max_samples)
-        print(
-            f"⚠️ [Fast Mode] Truncated dataset to {max_samples} samples for quick verification.")
+        print(f"⚠️ [Fast Mode] Truncated dataset to {max_samples} samples for quick verification.")
 
     # Split by verb
     unique_words = raw_df["word_id"].unique()
@@ -157,26 +156,19 @@ def run_training(
     n_val = int(len(unique_words) * 0.1)
 
     train_df = raw_df[raw_df["word_id"].isin(set(unique_words[:n_train]))]
-    val_df = raw_df[raw_df["word_id"].isin(
-        set(unique_words[n_train:n_train + n_val]))]
-    test_df = raw_df[raw_df["word_id"].isin(
-        set(unique_words[n_train + n_val:]))]
+    val_df = raw_df[raw_df["word_id"].isin(set(unique_words[n_train:n_train + n_val]))]
+    test_df = raw_df[raw_df["word_id"].isin(set(unique_words[n_train + n_val:]))]
 
     vocabs = seq_tagger.build_vocabularies(raw_df, strategy=strategy)
 
     # 2. Dataset & Loaders
-    train_encoded = seq_tagger.encode_with_ids(
-        train_df, vocabs, strategy=strategy)
+    train_encoded = seq_tagger.encode_with_ids(train_df, vocabs, strategy=strategy)
     val_encoded = seq_tagger.encode_with_ids(val_df, vocabs, strategy=strategy)
-    test_encoded = seq_tagger.encode_with_ids(
-        test_df, vocabs, strategy=strategy)
+    test_encoded = seq_tagger.encode_with_ids(test_df, vocabs, strategy=strategy)
 
-    train_loader = DataLoader(GeorgianTaggingDataset(
-        train_encoded), batch_size=batch_size, shuffle=True, collate_fn=pad_collate_fn)
-    val_loader = DataLoader(GeorgianTaggingDataset(
-        val_encoded), batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
-    test_loader = DataLoader(GeorgianTaggingDataset(
-        test_encoded), batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
+    train_loader = DataLoader(GeorgianTaggingDataset(train_encoded), batch_size=batch_size, shuffle=True, collate_fn=pad_collate_fn)
+    val_loader = DataLoader(GeorgianTaggingDataset(val_encoded), batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
+    test_loader = DataLoader(GeorgianTaggingDataset(test_encoded), batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
 
     # 3. Model & Optimizer
     model = BiLSTMMetadataTagger(vocabs).to(device)
@@ -187,9 +179,9 @@ def run_training(
     id2label = {v: k for k, v in vocabs["label2id"].items()}
     id2char = {v: k for k, v in vocabs["char2id"].items()}
 
-    # 4. Epoch Loop
+    # 4. Epoch Loop with Validation F1 Tracking
     history = {"epoch": [], "train_loss": [], "val_f1": []}
-    best_loss = float('inf')  # Track the lowest training loss
+    best_f1 = 0.0
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -205,43 +197,66 @@ def run_training(
             class_id = batch["class_id"].to(device)
 
             logits = model(tokens, screeve_id, subject_id, class_id)
-            loss = criterion(
-                logits.view(-1, logits.shape[-1]), labels.view(-1))
+            loss = criterion(logits.view(-1, logits.shape[-1]), labels.view(-1))
 
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
 
         epoch_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch}/{epochs} - Train Loss: {epoch_loss:.4f}")
+
+        # --- Validation Evaluation per Epoch ---
+        model.eval()
+        val_pred_strings = []
+        with torch.no_grad():
+            for batch in val_loader:
+                tokens = batch["tokens"].to(device)
+                screeve_id = batch["screeve_id"].to(device)
+                subject_id = batch["subject_id"].to(device)
+                class_id = batch["class_id"].to(device)
+
+                logits = model(tokens, screeve_id, subject_id, class_id)
+                preds = torch.argmax(logits, dim=-1).cpu().numpy()
+                tok_ids = tokens.cpu().numpy()
+
+                for b_idx in range(len(preds)):
+                    valid_mask = tok_ids[b_idx] != 0
+                    valid_toks = [id2char[t] for t in tok_ids[b_idx][valid_mask]]
+                    valid_preds = [id2label[p] for p in preds[b_idx][valid_mask]]
+                    val_pred_strings.append(seq_tagger.decode(valid_toks, valid_preds, strategy=strategy))
+
+        val_gold = val_df["segmented_target"].tolist()
+        val_metrics = evaluate.evaluate_predictions(val_gold, val_pred_strings)
+        val_f1 = val_metrics.get("morpheme_f1", 0.0)
+
+        print(f"Epoch {epoch}/{epochs} - Train Loss: {epoch_loss:.4f} | Val Morpheme F1: {val_f1:.4f}")
 
         history["epoch"].append(epoch)
         history["train_loss"].append(epoch_loss)
+        history["val_f1"].append(val_f1)
 
-        # Save checkpoint ONLY if this epoch has the lowest training loss so far
-        if epoch_loss < best_loss:
-            best_loss = epoch_loss
+        # Save checkpoint ONLY if validation Morpheme F1 improves
+        if val_f1 > best_f1:
+            best_f1 = val_f1
             checkpoint = {
                 "model_state_dict": model.state_dict(),
                 "vocabs": vocabs,
                 "strategy": strategy,
                 "epoch": epoch,
-                "train_loss": best_loss,
+                "val_f1": best_f1,
             }
             torch.save(checkpoint, f"model_tagger_{strategy}.pt")
-            print(
-                f"💾 [Checkpoint] Saved new best model with loss {best_loss:.4f} at epoch {epoch}")
+            print(f"💾 [Checkpoint] Saved new best model with Val Morpheme F1: {best_f1:.4f} at epoch {epoch}")
 
-    # 5. Evaluation
+    # 5. Final Test Set Evaluation (Using the Best Saved Checkpoint)
+    print("\n--- Loading Best Checkpoint for Test Set Evaluation ---")
+    checkpoint = torch.load(f"model_tagger_{strategy}.pt", map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
-    gold_strings = []
-    pred_strings = []
 
-    # Map raw targets for test set
-    test_raw = seq_tagger.encode(test_df, strategy=strategy)
-
+    test_pred_strings = []
     with torch.no_grad():
-        for i, batch in enumerate(test_loader):
+        for batch in test_loader:
             tokens = batch["tokens"].to(device)
             screeve_id = batch["screeve_id"].to(device)
             subject_id = batch["subject_id"].to(device)
@@ -252,17 +267,13 @@ def run_training(
             tok_ids = tokens.cpu().numpy()
 
             for b_idx in range(len(preds)):
-                # Filter padding
                 valid_mask = tok_ids[b_idx] != 0
                 valid_toks = [id2char[t] for t in tok_ids[b_idx][valid_mask]]
                 valid_preds = [id2label[p] for p in preds[b_idx][valid_mask]]
-
-                decoded_pred = seq_tagger.decode(
-                    valid_toks, valid_preds, strategy=strategy)
-                pred_strings.append(decoded_pred)
+                test_pred_strings.append(seq_tagger.decode(valid_toks, valid_preds, strategy=strategy))
 
     gold_strings = test_df["segmented_target"].tolist()
-    metrics = evaluate.evaluate_predictions(gold_strings, pred_strings)
+    metrics = evaluate.evaluate_predictions(gold_strings, test_pred_strings)
     elapsed_time = time.time() - start_time
     metrics["training_time_sec"] = round(elapsed_time, 1)
 
@@ -270,7 +281,7 @@ def run_training(
     evaluate.export_error_analysis(
         input_texts,
         gold_strings,
-        pred_strings,
+        test_pred_strings,
         output_path=f"error_analysis_tagger_{strategy}.csv",
     )
 
