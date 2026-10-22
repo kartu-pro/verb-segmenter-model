@@ -17,7 +17,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from TorchCRF import CRF
+from torchcrf import CRF
 
 import load
 import seq_tagger
@@ -35,10 +35,12 @@ class GeorgianTaggingDataset(Dataset):
     def __init__(self, encoded_df: pd.DataFrame):
         # Filter out empty sequences to prevent zero-length RNN errors
         if "token_ids" in encoded_df.columns:
-            encoded_df = encoded_df[encoded_df["token_ids"].apply(lambda x: len(x) > 0)].reset_index(drop=True)
+            encoded_df = encoded_df[encoded_df["token_ids"].apply(
+                lambda x: len(x) > 0)].reset_index(drop=True)
         elif "seq_len" in encoded_df.columns:
-            encoded_df = encoded_df[encoded_df["seq_len"] > 0].reset_index(drop=True)
-            
+            encoded_df = encoded_df[encoded_df["seq_len"]
+                                    > 0].reset_index(drop=True)
+
         self.data = encoded_df.to_dict(orient="records")
 
     def __len__(self):
@@ -99,7 +101,7 @@ class BiLSTMMetadataTaggerWithCRF(nn.Module):
         self.lstm = nn.LSTM(input_dim, hidden_dim,
                             batch_first=True, bidirectional=True)
         self.fc = nn.Linear(hidden_dim * 2, len(vocabs["label2id"]))
-        
+
         # Linear-chain CRF layer
         self.crf = CRF(len(vocabs["label2id"]), batch_first=True)
 
@@ -108,9 +110,12 @@ class BiLSTMMetadataTaggerWithCRF(nn.Module):
 
         # Lookup embeddings
         c_emb = self.char_embed(tokens)
-        s_emb = self.screeve_embed(screeve_id).unsqueeze(1).expand(-1, seq_len, -1)
-        subj_emb = self.subject_embed(subject_id).unsqueeze(1).expand(-1, seq_len, -1)
-        cls_emb = self.class_embed(class_id).unsqueeze(1).expand(-1, seq_len, -1)
+        s_emb = self.screeve_embed(screeve_id).unsqueeze(
+            1).expand(-1, seq_len, -1)
+        subj_emb = self.subject_embed(
+            subject_id).unsqueeze(1).expand(-1, seq_len, -1)
+        cls_emb = self.class_embed(class_id).unsqueeze(
+            1).expand(-1, seq_len, -1)
 
         # Concatenate features
         combined = torch.cat([c_emb, s_emb, subj_emb, cls_emb], dim=-1)
@@ -144,7 +149,8 @@ def run_training(
     max_samples: int = None,
 ):
     start_time = time.time()
-    print(f"--- Starting Sequence Tagger Training with CRF (Strategy: {strategy}) ---")
+    print(
+        f"--- Starting Sequence Tagger Training with CRF (Strategy: {strategy}) ---")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -153,7 +159,8 @@ def run_training(
 
     if max_samples:
         raw_df = raw_df.head(max_samples)
-        print(f"⚠️ [Fast Mode] Truncated dataset to {max_samples} samples for quick verification.")
+        print(
+            f"⚠️ [Fast Mode] Truncated dataset to {max_samples} samples for quick verification.")
 
     # Split by verb
     unique_words = raw_df["word_id"].unique()
@@ -163,19 +170,26 @@ def run_training(
     n_val = int(len(unique_words) * 0.1)
 
     train_df = raw_df[raw_df["word_id"].isin(set(unique_words[:n_train]))]
-    val_df = raw_df[raw_df["word_id"].isin(set(unique_words[n_train:n_train + n_val]))]
-    test_df = raw_df[raw_df["word_id"].isin(set(unique_words[n_train + n_val:]))]
+    val_df = raw_df[raw_df["word_id"].isin(
+        set(unique_words[n_train:n_train + n_val]))]
+    test_df = raw_df[raw_df["word_id"].isin(
+        set(unique_words[n_train + n_val:]))]
 
     vocabs = seq_tagger.build_vocabularies(raw_df, strategy=strategy)
 
     # 2. Dataset & Loaders
-    train_encoded = seq_tagger.encode_with_ids(train_df, vocabs, strategy=strategy)
+    train_encoded = seq_tagger.encode_with_ids(
+        train_df, vocabs, strategy=strategy)
     val_encoded = seq_tagger.encode_with_ids(val_df, vocabs, strategy=strategy)
-    test_encoded = seq_tagger.encode_with_ids(test_df, vocabs, strategy=strategy)
+    test_encoded = seq_tagger.encode_with_ids(
+        test_df, vocabs, strategy=strategy)
 
-    train_loader = DataLoader(GeorgianTaggingDataset(train_encoded), batch_size=batch_size, shuffle=True, collate_fn=pad_collate_fn)
-    val_loader = DataLoader(GeorgianTaggingDataset(val_encoded), batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
-    test_loader = DataLoader(GeorgianTaggingDataset(test_encoded), batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
+    train_loader = DataLoader(GeorgianTaggingDataset(
+        train_encoded), batch_size=batch_size, shuffle=True, collate_fn=pad_collate_fn)
+    val_loader = DataLoader(GeorgianTaggingDataset(
+        val_encoded), batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
+    test_loader = DataLoader(GeorgianTaggingDataset(
+        test_encoded), batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
 
     # 3. Model & Optimizer
     model = BiLSTMMetadataTaggerWithCRF(vocabs).to(device)
@@ -203,7 +217,8 @@ def run_training(
             class_id = batch["class_id"].to(device)
             mask = (tokens != 0)
 
-            loss = model(tokens, screeve_id, subject_id, class_id, labels=labels, mask=mask)
+            loss = model(tokens, screeve_id, subject_id,
+                         class_id, labels=labels, mask=mask)
 
             loss.backward()
             optimizer.step()
@@ -222,20 +237,24 @@ def run_training(
                 class_id = batch["class_id"].to(device)
                 mask = (tokens != 0)
 
-                predicted_paths = model(tokens, screeve_id, subject_id, class_id, labels=None, mask=mask)
+                predicted_paths = model(
+                    tokens, screeve_id, subject_id, class_id, labels=None, mask=mask)
                 tok_ids = tokens.cpu().numpy()
 
                 for b_idx, preds in enumerate(predicted_paths):
                     valid_mask = tok_ids[b_idx] != 0
-                    valid_toks = [id2char[t] for t in tok_ids[b_idx][valid_mask]]
+                    valid_toks = [id2char[t]
+                                  for t in tok_ids[b_idx][valid_mask]]
                     valid_preds = [id2label[p] for p in preds]
-                    val_pred_strings.append(seq_tagger.decode(valid_toks, valid_preds, strategy=strategy))
+                    val_pred_strings.append(seq_tagger.decode(
+                        valid_toks, valid_preds, strategy=strategy))
 
         val_gold = val_df["segmented_target"].tolist()
         val_metrics = evaluate.evaluate_predictions(val_gold, val_pred_strings)
         val_f1 = val_metrics.get("morpheme_f1", 0.0)
 
-        print(f"Epoch {epoch}/{epochs} - Train Loss: {epoch_loss:.4f} | Val Morpheme F1: {val_f1:.4f}")
+        print(
+            f"Epoch {epoch}/{epochs} - Train Loss: {epoch_loss:.4f} | Val Morpheme F1: {val_f1:.4f}")
 
         history["epoch"].append(epoch)
         history["train_loss"].append(epoch_loss)
@@ -251,7 +270,8 @@ def run_training(
                 "val_f1": best_f1,
             }
             torch.save(checkpoint, f"model_tagger_{strategy}.pt")
-            print(f"💾 [Checkpoint] Saved new best CRF model with Val Morpheme F1: {best_f1:.4f} at epoch {epoch}")
+            print(
+                f"💾 [Checkpoint] Saved new best CRF model with Val Morpheme F1: {best_f1:.4f} at epoch {epoch}")
 
     # 5. Final Test Set Evaluation (Using the Best Saved Checkpoint)
     print("\n--- Loading Best Checkpoint for Test Set Evaluation ---")
@@ -268,14 +288,16 @@ def run_training(
             class_id = batch["class_id"].to(device)
             mask = (tokens != 0)
 
-            predicted_paths = model(tokens, screeve_id, subject_id, class_id, labels=None, mask=mask)
+            predicted_paths = model(
+                tokens, screeve_id, subject_id, class_id, labels=None, mask=mask)
             tok_ids = tokens.cpu().numpy()
 
             for b_idx, preds in enumerate(predicted_paths):
                 valid_mask = tok_ids[b_idx] != 0
                 valid_toks = [id2char[t] for t in tok_ids[b_idx][valid_mask]]
                 valid_preds = [id2label[p] for p in preds]
-                test_pred_strings.append(seq_tagger.decode(valid_toks, valid_preds, strategy=strategy))
+                test_pred_strings.append(seq_tagger.decode(
+                    valid_toks, valid_preds, strategy=strategy))
 
     gold_strings = test_df["segmented_target"].tolist()
     metrics = evaluate.evaluate_predictions(gold_strings, test_pred_strings)
@@ -303,8 +325,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--words_path", type=str, default="words.tsv")
     parser.add_argument("--forms_path", type=str, default="forms.tsv")
-    parser.add_argument("--strategy", type=str, choices=["boundaries", "bio"], default="bio")
+    parser.add_argument("--strategy", type=str,
+                        choices=["boundaries", "bio"], default="bio")
     parser.add_argument("--epochs", type=int, default=10)
     args = parser.parse_args()
 
-    run_training(args.words_path, args.forms_path, strategy=args.strategy, epochs=args.epochs)
+    run_training(args.words_path, args.forms_path,
+                 strategy=args.strategy, epochs=args.epochs)
