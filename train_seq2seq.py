@@ -64,28 +64,29 @@ def restore_latest_checkpoint_from_drive(output_dir, drive_base_dir="/content/dr
     shutil.copytree(latest_drive_ckpt, local_target_ckpt, dirs_exist_ok=True)
 
 
-def backup_latest_checkpoint_to_drive(output_dir, drive_base_dir="/content/drive/MyDrive/GeorgianVerbSegmentation_Models"):
-    """Copies the latest checkpoint folder directly to Google Drive for safe resumption."""
+def backup_latest_checkpoint_to_drive(output_dir, drive_base_dir="/content/drive/MyDrive/GeorgianVerbSegmentation_Models", keep_last_n=1):
+    """Copies the latest checkpoint to Google Drive and cleans up older ones to save space."""
     if not os.path.exists("/content/drive"):
         return
 
-    # Find all checkpoint folders in the output directory (e.g., checkpoint-500)
+    # 1. Find all local checkpoints
     checkpoints = [os.path.join(output_dir, d) for d in os.listdir(output_dir) if d.startswith(
         "checkpoint-") and os.path.isdir(os.path.join(output_dir, d))]
     if not checkpoints:
         return
 
-    # Get the latest checkpoint based on modification time or step number
+    # Get the latest checkpoint based on modification time
     latest_ckpt = max(checkpoints, key=os.path.getmtime)
     ckpt_name = os.path.basename(latest_ckpt)
 
-    target_dir = os.path.join(
-        drive_base_dir, os.path.basename(output_dir), ckpt_name)
+    drive_output_dir = os.path.join(
+        drive_base_dir, os.path.basename(output_dir))
+    target_dir = os.path.join(drive_output_dir, ckpt_name)
     os.makedirs(target_dir, exist_ok=True)
 
     print(f"\n☁️ [Drive Backup] Copying {ckpt_name} to Google Drive...")
 
-    # Copy all files in the checkpoint directory (including optimizer.pt, trainer_state.json, etc.)
+    # Copy files
     for item in os.listdir(latest_ckpt):
         s_item = os.path.join(latest_ckpt, item)
         d_item = os.path.join(target_dir, item)
@@ -95,6 +96,21 @@ def backup_latest_checkpoint_to_drive(output_dir, drive_base_dir="/content/drive
             shutil.copy2(s_item, d_item)
 
     print(f"  ✓ Successfully backed up {ckpt_name} to Drive!")
+
+    # 2. Cleanup older checkpoints in Google Drive to control file size
+    if os.path.exists(drive_output_dir):
+        drive_ckpts = [os.path.join(drive_output_dir, d) for d in os.listdir(drive_output_dir) if d.startswith(
+            "checkpoint-") and os.path.isdir(os.path.join(drive_output_dir, d))]
+
+        # Sort checkpoints by modification time (oldest first)
+        drive_ckpts.sort(key=os.path.getmtime)
+
+        # If we have more than keep_last_n, delete the oldest ones
+        while len(drive_ckpts) > keep_last_n:
+            old_ckpt = drive_ckpts.pop(0)
+            print(
+                f"🧹 [Drive Cleanup] Removing old checkpoint to save space: {os.path.basename(old_ckpt)}")
+            shutil.rmtree(old_ckpt)
 
 
 class DriveCheckpointCallback(TrainerCallback):
