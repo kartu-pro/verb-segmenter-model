@@ -24,6 +24,7 @@ from datasets import Dataset
 import load
 import seq_2_seq
 import evaluate
+import experiments
 
 
 def split_data_by_verb(df: pd.DataFrame, train_ratio: float = 0.8, val_ratio: float = 0.1, seed: int = 42):
@@ -215,13 +216,15 @@ def run_training(
 
     elapsed_time = time.time() - start_time
 
-    return {
+    metrics_dict = {
         "exact_match": test_metrics.get("test_exact_match", 0.0),
         "norm_edit_dist": test_metrics.get("test_norm_edit_dist", 0.0),
         "positional_slot_acc": test_metrics.get("test_positional_slot_acc", 0.0),
         "morpheme_f1": test_metrics.get("test_morpheme_f1", 0.0),
         "training_time_sec": round(elapsed_time, 1)
     }
+    experiments.log_experiment(model_name, mode, metrics_dict)
+    return metrics_dict
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ from torch.utils.data import Dataset, DataLoader
 import load
 import seq_tagger
 import evaluate
+import experiments
 
 
 # ==========================================
@@ -244,6 +245,7 @@ def run_training(words_path: str, forms_path: str, strategy: str = "boundaries",
 
     with open(f"./results_tagger_{strategy}_history.json", "w") as f:
         json.dump(history, f, indent=4)
+    experiments.log_experiment("BiLSTM-Meta", strategy, metrics)
 
     print("\n--- Test Set Evaluation ---")
     print(metrics)

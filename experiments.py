@@ -1,13 +1,14 @@
 """
-experiments.py
---------------
-Handles experiment tracking, JSON/CSV result logging, and comparison summaries.
+experiments.py (Updated)
+------------------------
+Handles experiment tracking, JSON/CSV result logging, summary tables, and reports.
 """
 
 import os
 import json
 import pandas as pd
 from IPython.display import display
+import plot  # Import your plotting module
 
 RESULTS_FILE = "experiment_results.json"
 
@@ -33,7 +34,6 @@ def log_experiment(model_name: str, strategy_mode: str, metrics: dict):
         "Training Time (s)": metrics.get("training_time_sec", 0.0)
     }
 
-    # Load existing, append, and save back (semi-persistent across cell runs)
     if os.path.exists(RESULTS_FILE):
         with open(RESULTS_FILE, "r") as f:
             try:
@@ -47,21 +47,25 @@ def log_experiment(model_name: str, strategy_mode: str, metrics: dict):
     with open(RESULTS_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-    print(
-        f"\n[Logged Successfully] {model_name} ({strategy_mode}) | F1: {row['Morpheme F1 (%)']}%")
+    print(f"\n[Logged Successfully] {model_name} ({strategy_mode}) | F1: {row['Morpheme F1 (%)']}%")
 
 
-def summarize_experiments():
-    """Loads all logged experiments, displays styled summary table, and exports CSV."""
+def generate_final_report():
+    """
+    Single method call to generate the full experiment suite report:
+      1. Displays the highlighted summary table.
+      2. Exports the comparison CSV.
+      3. Renders and saves the cross-model performance comparison plots.
+    """
     if not os.path.exists(RESULTS_FILE):
-        print("No experiments found. Run some training cells first!")
+        print("❌ No experiment results found. Run some training cells first!")
         return
 
     with open(RESULTS_FILE, "r") as f:
         data = json.load(f)
 
     if not data:
-        print("Experiment log is empty.")
+        print("⚠️ Experiment log is empty.")
         return
 
     summary_df = pd.DataFrame(data)
@@ -79,4 +83,9 @@ def summarize_experiments():
 
     # Export for presentation/reports
     summary_df.to_csv("segmentation_benchmark_results.csv", index=False)
-    print("\nSaved comparison table to 'segmentation_benchmark_results.csv'")
+    print("\n✓ Saved comparison table to 'segmentation_benchmark_results.csv'")
+
+    print("\n" + "=" * 80)
+    print("GENERATING VISUAL REPORTS")
+    print("=" * 80)
+    plot.plot_cross_model_comparison(RESULTS_FILE)
