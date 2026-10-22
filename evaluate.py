@@ -24,6 +24,7 @@ Metrics Computed:
      * F1        = Harmonic mean of Precision and Recall
 """
 
+import pandas as pd
 from typing import List, Dict, Any
 from load import SLOT_KEYS
 
@@ -74,7 +75,7 @@ def parse_segmented_slots(segmented_str: str) -> List[str]:
         return [""] * len(SLOT_KEYS)
 
     parts = segmented_str.split("-")
-    
+
     # Pad or truncate to ensure exactly 6 slots
     slots = parts + [""] * (len(SLOT_KEYS) - len(parts))
     return slots[:len(SLOT_KEYS)]
@@ -158,3 +159,30 @@ def evaluate_predictions(gold_targets: List[str], pred_targets: List[str]) -> Di
         "morpheme_recall": round(recall * 100, 2),
         "morpheme_f1": round(f1 * 100, 2)
     }
+
+
+def export_error_analysis(
+    text_list, gold_list, pred_list, output_path="error_analysis.csv"
+):
+    """Filters and saves predictions that failed exact match for qualitative review."""
+    analysis_data = []
+    for text, gold, pred in zip(text_list, gold_list, pred_list):
+        if gold != pred:
+            analysis_data.append(
+                {
+                    "Input Form": text,
+                    "Gold Segmentation": gold,
+                    "Predicted Segmentation": pred,
+                }
+            )
+
+    df_errors = pd.DataFrame(analysis_data)
+    if not df_errors.empty:
+        df_errors.to_csv(output_path, index=False)
+        print(
+            f"🔍 Exported {len(df_errors)} error cases to '{output_path}' for"
+            " linguistic debugging."
+        )
+    else:
+        print("🎉 Zero errors found! Perfect match across the test set.")
+    return df_errors

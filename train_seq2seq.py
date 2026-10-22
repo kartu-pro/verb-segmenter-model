@@ -150,7 +150,7 @@ def run_training(
         bf16=torch.cuda.is_available(),
         fp16=False,
         logging_steps=logging_steps,
-        disable_tqdm=True,
+        # disable_tqdm=True,
         report_to="none"
     )
 
@@ -193,6 +193,24 @@ def run_training(
         print("\n--- Test Set Evaluation ---")
         test_results = trainer.predict(test_dataset)
         test_metrics = test_results.metrics
+
+        preds = test_results.predictions
+        labels = test_results.label_ids
+        preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
+        labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+
+        decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
+        decoded_labels = tokenizer.batch_decode(
+            labels, skip_special_tokens=True)
+        input_texts = test_encoded["input_text"].tolist()
+
+        evaluate.export_error_analysis(
+            input_texts,
+            decoded_labels,
+            decoded_preds,
+            output_path=f"error_analysis_seq2seq_{mode}.csv",
+        )
+
         print("Test Metrics:", test_metrics)
 
     elapsed_time = time.time() - start_time

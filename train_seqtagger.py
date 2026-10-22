@@ -10,6 +10,7 @@ Integrates:
 """
 
 import time
+import json
 import argparse
 import numpy as np
 import pandas as pd
@@ -171,6 +172,7 @@ def run_training(words_path: str, forms_path: str, strategy: str = "boundaries",
     id2char = {v: k for k, v in vocabs["char2id"].items()}
 
     # 4. Epoch Loop
+    history = {"epoch": [], "train_loss": [], "val_f1": []}
     for epoch in range(1, epochs + 1):
         model.train()
         total_loss = 0.0
@@ -194,6 +196,9 @@ def run_training(words_path: str, forms_path: str, strategy: str = "boundaries",
 
         print(
             f"Epoch {epoch}/{epochs} - Train Loss: {total_loss / len(train_loader):.4f}")
+
+        history["epoch"].append(epoch)
+        history["train_loss"].append(total_loss / len(train_loader))
 
     # 5. Evaluation
     model.eval()
@@ -228,6 +233,18 @@ def run_training(words_path: str, forms_path: str, strategy: str = "boundaries",
     metrics = evaluate.evaluate_predictions(gold_strings, pred_strings)
     elapsed_time = time.time() - start_time
     metrics["training_time_sec"] = round(elapsed_time, 1)
+
+    input_texts = test_df["form"].tolist()
+    evaluate.export_error_analysis(
+        input_texts,
+        gold_strings,
+        pred_strings,
+        output_path=f"error_analysis_tagger_{strategy}.csv",
+    )
+
+    with open(f"./results_tagger_{strategy}_history.json", "w") as f:
+        json.dump(history, f, indent=4)
+
     print("\n--- Test Set Evaluation ---")
     print(metrics)
     return metrics
