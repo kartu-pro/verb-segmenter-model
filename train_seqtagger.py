@@ -189,6 +189,8 @@ def run_training(
 
     # 4. Epoch Loop
     history = {"epoch": [], "train_loss": [], "val_f1": []}
+    best_loss = float('inf')  # Track the lowest training loss
+
     for epoch in range(1, epochs + 1):
         model.train()
         total_loss = 0.0
@@ -210,12 +212,25 @@ def run_training(
             optimizer.step()
             total_loss += loss.item()
 
-        print(
-            f"Epoch {epoch}/{epochs} - Train Loss: {total_loss / len(train_loader):.4f}")
+        epoch_loss = total_loss / len(train_loader)
+        print(f"Epoch {epoch}/{epochs} - Train Loss: {epoch_loss:.4f}")
 
         history["epoch"].append(epoch)
-        history["train_loss"].append(total_loss / len(train_loader))
+        history["train_loss"].append(epoch_loss)
 
+        # Save checkpoint ONLY if this epoch has the lowest training loss so far
+        if epoch_loss < best_loss:
+            best_loss = epoch_loss
+            checkpoint = {
+                "model_state_dict": model.state_dict(),
+                "vocabs": vocabs,
+                "strategy": strategy,
+                "epoch": epoch,
+                "train_loss": best_loss,
+            }
+            torch.save(checkpoint, f"model_tagger_{strategy}.pt")
+            print(
+                f"💾 [Checkpoint] Saved new best model with loss {best_loss:.4f} at epoch {epoch}")
     # 5. Evaluation
     model.eval()
     gold_strings = []
@@ -262,14 +277,6 @@ def run_training(
         json.dump(history, f, indent=4)
     experiments.log_experiment("BiLSTM-Meta", strategy, metrics)
 
-    checkpoint = {
-        "model_state_dict": model.state_dict(),
-        "vocabs": vocabs,
-        "strategy": strategy,
-    }
-    torch.save(checkpoint, f"model_tagger_{strategy}.pt")
-    print(f"📦 Saved tagger checkpoint to 'model_tagger_{strategy}.pt'")
-
     print("\n--- Test Set Evaluation ---")
     print(metrics)
     return metrics
@@ -285,4 +292,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_training(args.words_path, args.forms_path,
+                 strategy=args.strategy, epochs=args.epochs)
                  strategy=args.strategy, epochs=args.epochs)
