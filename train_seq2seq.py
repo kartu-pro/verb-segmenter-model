@@ -330,4 +330,3 @@ if __name__ == "__main__":
         model_name=args.model_name,
         smoke_test=args.smoke_test
     )
-    )
