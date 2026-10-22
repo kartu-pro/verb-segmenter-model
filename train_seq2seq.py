@@ -266,7 +266,8 @@ def run_training(
 
     restore_latest_checkpoint_from_drive(training_args.output_dir)
 
-# Restore from Drive if local runtime was wiped out
+    # Restore from Drive if local runtime was wiped out
+    from transformers.trainer_utils import get_last_checkpoint
     restore_latest_checkpoint_from_drive(training_args.output_dir)
     checkpoint_to_resume = None
     if not smoke_test:
@@ -323,6 +324,104 @@ def run_training(
         "training_time_sec": round(elapsed_time, 1)
     }
     experiments.log_experiment(model_name, mode, metrics_dict)
+    return metrics_dict
+
+import time
+import experiments
+import evaluate
+
+def evaluate_saved_checkpoint(mode="single", model_name="google/byt5-small", words_path="words.tsv", forms_path="forms.tsv"):
+    """Loads the latest checkpoint, runs test evaluation, exports error analysis, and logs results."""
+    start_time = time.time()
+    output_dir = f"./results_seq2seq_{mode}"
+    
+    # Restore from Drive if local runtime was reset
+    restore_latest_checkpoint_from_drive(output_dir)
+    checkpoint_path = get_last_checkpoint(output_dir)
+    
+    if not checkpoint_path:
+        raise FileNotFoundError(f"No checkpoint found in {output_dir} or Google Drive.")
+        
+    print(f"📂 Loading checkpoint: {checkpoint_path}")
+    
+    # Recreate test split & tokenization
+    raw_df = load.load_and_merge_data(words_path, forms_path)
+    _, _, test_df = split_data_by_verb(raw_df)
+    test_encoded = seq_2_seq.encode(test_df, mode=mode)
+    
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
+    model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint_path)
+    
+    def preprocess_function(examples):
+        model_inputs = tokenizer(examples["input_text"], max_length=256, truncation=True)
+        labels = tokenizer(text_target=examples["target_text"], max_length=128, truncation=True)
+        model_inputs["labels"] = labels["input_ids"]
+        return model_inputs
+
+    test_dataset = Dataset.from_pandas(test_encoded).map(
+        preprocess_function, batched=True, remove_columns=["input_text", "target_text"]
+    )
+    
+    def compute_metrics(eval_preds):
+        preds, labels = eval_preds
+        preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
+        labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+        decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
+        decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+        return evaluate.evaluate_predictions(decoded_labels, decoded_preds)
+
+    training_args = Seq2SeqTrainingArguments(
+        output_dir=output_dir,
+        per_device_eval_batch_size=16,
+        predict_with_generate=True,
+        generation_max_length=128,
+        report_to="none"
+    )
+
+    trainer = Seq2SeqTrainer(
+        model=model,
+        args=training_args,
+        processing_class=tokenizer,
+        data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
+        compute_metrics=compute_metrics
+    )
+
+    print("\n--- Running Test Set Evaluation from Checkpoint ---")
+    test_results = trainer.predict(test_dataset)
+    test_metrics = test_results.metrics
+
+    # --- Added: Decode predictions and export error analysis CSV ---
+    preds = test_results.predictions
+    labels = test_results.label_ids
+    preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
+    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+
+    decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
+    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    input_texts = test_encoded["input_text"].tolist()
+
+    evaluate.export_error_analysis(
+        input_texts,
+        decoded_labels,
+        decoded_preds,
+        output_path=f"error_analysis_seq2seq_{mode}.csv",
+    )
+    # -------------------------------------------------------------
+
+    elapsed_time = time.time() - start_time
+
+    metrics_dict = {
+        "exact_match": test_metrics.get("test_exact_match", 0.0),
+        "norm_edit_dist": test_metrics.get("test_norm_edit_dist", 0.0),
+        "positional_slot_acc": test_metrics.get("test_positional_slot_acc", 0.0),
+        "morpheme_precision": test_metrics.get("test_morpheme_precision", 0.0),
+        "morpheme_recall": test_metrics.get("test_morpheme_recall", 0.0),
+        "morpheme_f1": test_metrics.get("test_morpheme_f1", 0.0),
+        "training_time_sec": round(elapsed_time, 1)
+    }
+    
+    experiments.log_experiment(model_name, mode, metrics_dict)
+    print("Test Metrics:", test_metrics)
     return metrics_dict
 
 
