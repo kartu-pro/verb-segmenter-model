@@ -119,7 +119,14 @@ class BiLSTMMetadataTagger(nn.Module):
 # 3. TRAINING LOOP
 # ==========================================
 
-def run_training(words_path: str, forms_path: str, strategy: str = "boundaries", epochs: int = 10, batch_size: int = 32, max_samples: int = None):
+def run_training(
+    words_path: str = "words.tsv",
+    forms_path: str = "forms.tsv",
+    strategy: str = "boundaries",
+    epochs: int = 10,
+    batch_size: int = 16,
+    max_samples: int = None,
+):
     start_time = time.time()
     print(f"--- Starting Sequence Tagger Training (Strategy: {strategy}) ---")
 
