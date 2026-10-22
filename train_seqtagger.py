@@ -32,6 +32,14 @@ class GeorgianTaggingDataset(Dataset):
     """PyTorch Dataset wrapping encoded integer IDs."""
 
     def __init__(self, encoded_df: pd.DataFrame):
+        # Filter out empty sequences to prevent zero-length RNN errors
+        if "token_ids" in encoded_df.columns:
+            encoded_df = encoded_df[encoded_df["token_ids"].apply(
+                lambda x: len(x) > 0)].reset_index(drop=True)
+        elif "seq_len" in encoded_df.columns:
+            encoded_df = encoded_df[encoded_df["seq_len"]
+                                    > 0].reset_index(drop=True)
+
         self.data = encoded_df.to_dict(orient="records")
 
     def __len__(self):
