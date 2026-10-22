@@ -73,9 +73,10 @@ def build_vocabularies(df: pd.DataFrame, strategy: str = "boundaries") -> Dict[s
 # 2. BIO SLOT TAGGING (STRATEGY: BIO)
 # ==========================================
 
-def encode_bio(attr_dict: dict) -> Tuple[List[str], List[str]]:
+def encode_bio(form: str, attr_dict: dict) -> Tuple[List[str], List[str]]:
     """
-    Encodes surface characters into BIO slot tags for existing morphemes.
+    Encodes surface characters into BIO slot tags for the entire word form,
+    assigning 'O' to characters or gaps not covered by active slots.
 
     Args:
         attr_dict: Form attribute dictionary containing slot values.
@@ -87,14 +88,22 @@ def encode_bio(attr_dict: dict) -> Tuple[List[str], List[str]]:
         tokens = ['ა', 'კ', 'ე', 'თ', 'ე', 'ბ', 'ს']
         labels = ['B-VERSION', 'B-ROOT', 'I-ROOT', 'I-ROOT', 'B-PFSF', 'I-PFSF', 'B-SUFFIX']
     """
-    chars, labels = [], []
+    chars = list(form)
+    labels = ["O"] * len(form)
+
+    current_idx = 0
     for key in SLOT_KEYS:
         val = attr_dict.get(key)
         if val:
-            for idx, char in enumerate(val):
-                tag = f"B-{key.upper()}" if idx == 0 else f"I-{key.upper()}"
-                chars.append(char)
-                labels.append(tag)
+            val_len = len(val)
+            # Find where this slot value occurs in the form starting from current_idx
+            pos = form.find(val, current_idx)
+            if pos != -1:
+                for i in range(val_len):
+                    tag = f"B-{key.upper()}" if i == 0 else f"I-{key.upper()}"
+                    labels[pos + i] = tag
+                current_idx = pos + val_len
+
     return chars, labels
 
 
@@ -248,7 +257,7 @@ def encode(df: pd.DataFrame, strategy: str = "boundaries") -> pd.DataFrame:
     records = []
     for _, row in df.iterrows():
         if strategy == "bio":
-            tokens, labels = encode_bio(row["form_attr"])
+            tokens, labels = encode_bio(row["form"], row["form_attr"])
         elif strategy == "boundaries":
             tokens, labels = encode_boundaries(row["form"], row["form_attr"])
         else:
