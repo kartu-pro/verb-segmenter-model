@@ -254,6 +254,14 @@ def run_training(
         json.dump(history, f, indent=4)
     experiments.log_experiment("BiLSTM-Meta", strategy, metrics)
 
+    checkpoint = {
+        "model_state_dict": model.state_dict(),
+        "vocabs": vocabs,
+        "strategy": strategy,
+    }
+    torch.save(checkpoint, f"model_tagger_{strategy}.pt")
+    print(f"📦 Saved tagger checkpoint to 'model_tagger_{strategy}.pt'")
+
     print("\n--- Test Set Evaluation ---")
     print(metrics)
     return metrics
