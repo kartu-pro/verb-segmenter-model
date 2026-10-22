@@ -60,7 +60,8 @@ def restore_latest_checkpoint_from_drive(output_dir, drive_base_dir="/content/dr
     local_target_ckpt = os.path.join(local_output_path, ckpt_name)
 
     print(
-        f"🔄 [Drive Restore] Found checkpoint in Drive ({ckpt_name}). Copying to local runtime...")     shutil.copytree(latest_drive_ckpt, local_target_ckpt, dirs_exist_ok=True)
+        f"🔄 [Drive Restore] Found checkpoint in Drive ({ckpt_name}). Copying to local runtime...")
+    shutil.copytree(latest_drive_ckpt, local_target_ckpt, dirs_exist_ok=True)
 
 
 def backup_latest_checkpoint_to_drive(output_dir, drive_base_dir="/content/drive/MyDrive/GeorgianVerbSegmentation_Models"):
@@ -329,4 +330,5 @@ if __name__ == "__main__":
         max_samples=args.max_samples,
         model_name=args.model_name,
         smoke_test=args.smoke_test
+    )
     )
