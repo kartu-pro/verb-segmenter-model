@@ -231,6 +231,7 @@ def run_training(
             torch.save(checkpoint, f"model_tagger_{strategy}.pt")
             print(
                 f"💾 [Checkpoint] Saved new best model with loss {best_loss:.4f} at epoch {epoch}")
+
     # 5. Evaluation
     model.eval()
     gold_strings = []
@@ -292,5 +293,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_training(args.words_path, args.forms_path,
-                 strategy=args.strategy, epochs=args.epochs)
                  strategy=args.strategy, epochs=args.epochs)
