@@ -30,6 +30,9 @@ def log_experiment(model_name: str, strategy_mode: str, metrics: dict):
         "Exact Match (%)": metrics.get("exact_match", 0.0),
         "Norm Edit Dist": metrics.get("norm_edit_dist", 0.0),
         "Slot Accuracy (%)": metrics.get("positional_slot_acc", 0.0),
+        # Added
+        "Morpheme Precision (%)": metrics.get("morpheme_precision", 0.0),
+        "Morpheme Recall (%)": metrics.get("morpheme_recall", 0.0),     # Added
         "Morpheme F1 (%)": metrics.get("morpheme_f1", 0.0),
         "Training Time (s)": metrics.get("training_time_sec", 0.0)
     }
@@ -47,7 +50,8 @@ def log_experiment(model_name: str, strategy_mode: str, metrics: dict):
     with open(RESULTS_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-    print(f"\n[Logged Successfully] {model_name} ({strategy_mode}) | F1: {row['Morpheme F1 (%)']}%")
+    print(
+        f"\n[Logged Successfully] {model_name} ({strategy_mode}) | F1: {row['Morpheme F1 (%)']}%")
 
 
 def generate_final_report():
@@ -57,8 +61,9 @@ def generate_final_report():
       2. Exports the comparison CSV.
       3. Renders and saves the cross-model performance comparison plots.
     """
+    """Generates the full summary table, CSV export, and cross-model plots."""
     if not os.path.exists(RESULTS_FILE):
-        print("❌ No experiment results found. Run some training cells first!")
+        print("❌ No experiment results found.")
         return
 
     with open(RESULTS_FILE, "r") as f:
@@ -74,14 +79,21 @@ def generate_final_report():
     print("COMPREHENSIVE MODEL EVALUATION SUMMARY")
     print("=" * 80)
 
+    # Highlight all percentage performance metrics
     styled_df = summary_df.style.highlight_max(
-        subset=["Exact Match (%)", "Morpheme F1 (%)", "Slot Accuracy (%)"], color="lightgreen"
+        subset=[
+            "Exact Match (%)",
+            "Slot Accuracy (%)",
+            "Morpheme Precision (%)",
+            "Morpheme Recall (%)",
+            "Morpheme F1 (%)"
+        ],
+        color="lightgreen"
     ).highlight_min(
         subset=["Norm Edit Dist", "Training Time (s)"], color="lightgreen"
     )
     display(styled_df)
 
-    # Export for presentation/reports
     summary_df.to_csv("segmentation_benchmark_results.csv", index=False)
     print("\n✓ Saved comparison table to 'segmentation_benchmark_results.csv'")
 
