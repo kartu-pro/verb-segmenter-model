@@ -3,7 +3,7 @@ plot.py
 -------
 Comprehensive visualization suite for Georgian verb morpheme segmentation models.
 Supports cross-model benchmarks, custom PyTorch tagger histories, Hugging Face 
-Seq2Seq training curves, and error analysis volume comparisons.
+Seq2Seq training curves, slot-level error breakdowns, and error analysis volume comparisons.
 """
 
 import os
@@ -11,17 +11,15 @@ import json
 import glob
 import pandas as pd
 import matplotlib.pyplot as plt
+from evaluate import parse_segmented_slots, SLOT_KEYS
 
 
-def plot_cross_model_comparison(results_file="experiment_results.json"):
-    """
-    Generates a comparative multi-panel bar chart across all logged model runs.
-    
-    What it shows:
-      - Panel 1: Performance metrics comparison (%) including Morpheme F1, Exact Match, 
-        Slot Accuracy, Precision, and Recall across all evaluated architectures.
-      - Panel 2: Training efficiency comparison showing total training duration in seconds.
-    """
+# ==========================================
+# MODULAR HELPER FUNCTIONS (One plot per function)
+# ==========================================
+
+def plot_single_cross_model_comparison(results_file="experiment_results.json", save_path="results/plots/cross_model_comparison.png"):
+    """Helper function: Generates a comparative multi-panel bar chart across all logged model runs."""
     if not os.path.exists(results_file):
         print(f"❌ Error: {results_file} not found.")
         return
@@ -55,19 +53,13 @@ def plot_cross_model_comparison(results_file="experiment_results.json"):
         axes[1].grid(axis="y", linestyle=":", alpha=0.7)
 
     plt.tight_layout()
-    save_path = "cross_model_comparison.png"
     plt.savefig(save_path, dpi=300)
     print(f"✓ Cross-model comparison plot saved to '{save_path}'")
     plt.close()
 
 
-def plot_tagger_history(history_file: str):
-    """
-    Generates training trajectory plots for custom PyTorch sequence tagger runs.
-    
-    What it shows:
-      - Training loss progression across epochs from `results_tagger_*_history.json`.
-    """
+def plot_single_tagger_history(history_file: str):
+    """Helper function: Generates training trajectory loss plot for a custom PyTorch sequence tagger run."""
     if not os.path.exists(history_file):
         print(f"❌ Error: {history_file} not found.")
         return
@@ -87,24 +79,29 @@ def plot_tagger_history(history_file: str):
     plt.grid(True, linestyle=":", alpha=0.7)
     plt.legend()
 
-    save_path = history_file.replace(".json", "_plot.png")
+    filename = os.path.basename(history_file)
+    name_without_ext = filename.replace(".json", "")
+    save_filename = f"{name_without_ext}_plot.png"
+    save_path = os.path.join("results/plots", save_filename)
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
     print(f"✓ Tagger history plot saved to '{save_path}'")
     plt.close()
 
 
-def plot_training_results(results_dir: str):
-    """
-    Loads Hugging Face trainer_state.json from a Seq2Seq results directory and generates diagnostic plots.
-    
-    What it shows:
-      - Panel 1: Training loss vs. Validation loss over optimization steps.
-      - Panel 2: Evaluation metrics trajectories (e.g., exact match, F1, edit distance) logged during training.
-    """
-    state_path = os.path.join(results_dir, "trainer_state.json")
+def plot_single_seq2seq_training(path_input: str):
+    """Helper function: Loads Hugging Face trainer_state.json (direct file or directory) and plots loss/metrics."""
+    # Handle whether a direct file path or a directory was passed
+    if os.path.isfile(path_input):
+        state_path = path_input
+        # Extract name like 'trainer_state_group6'
+        identifier = os.path.splitext(os.path.basename(state_path))[0]
+    else:
+        state_path = os.path.join(path_input, "trainer_state.json")
+        identifier = os.path.basename(path_input)
+
     if not os.path.exists(state_path):
-        print(f"❌ Error: Could not find 'trainer_state.json' in directory: {results_dir}")
+        print(f"❌ Error: Could not find 'trainer_state.json' at: {state_path}")
         return
 
     with open(state_path, "r") as f:
@@ -127,7 +124,7 @@ def plot_training_results(results_dir: str):
     if not eval_df.empty:
         axes[0].plot(eval_df["step"], eval_df["eval_loss"], label="Validation Loss", color="orange", marker="o", linestyle="--")
 
-    axes[0].set_title(f"Seq2Seq Loss Curves\n({results_dir})", fontsize=12, fontweight="bold")
+    axes[0].set_title(f"Seq2Seq Loss Curves\n({identifier})", fontsize=12, fontweight="bold")
     axes[0].set_xlabel("Steps")
     axes[0].set_ylabel("Loss")
     axes[0].legend()
@@ -141,32 +138,30 @@ def plot_training_results(results_dir: str):
         for col in metric_cols:
             metric_name = col.replace("eval_", "")
             axes[1].plot(eval_df["step"], eval_df[col], label=metric_name, marker="s", linestyle="-")
-        axes[1].set_title(f"Seq2Seq Evaluation Metrics\n({results_dir})", fontsize=12, fontweight="bold")
+        axes[1].set_title(f"Seq2Seq Evaluation Metrics\n({identifier})", fontsize=12, fontweight="bold")
         axes[1].set_xlabel("Steps")
         axes[1].set_ylabel("Score")
         axes[1].legend()
         axes[1].grid(True, linestyle=":", alpha=0.7)
     else:
-        axes[1].text(0.5, 0.5, "No validation metrics logged yet\n(or eval strategy was set to 'no')",
-                     horizontalalignment='center', verticalalignment='center', transform=axes[1].transAxes, fontsize=10, color="gray")
+        axes[1].text(0.5, 0.5, "No validation metrics logged yet", horizontalalignment='center', verticalalignment='center', transform=axes[1].transAxes, fontsize=10, color="gray")
         axes[1].set_title("Evaluation Metrics", fontsize=12, fontweight="bold")
 
     plt.tight_layout()
-    save_path = f"{results_dir}_training_plot.png"
+    
+    # --- SAVE PATH ---
+    output_dir = "results/plots"
+    os.makedirs(output_dir, exist_ok=True)
+    save_path = os.path.join(output_dir, f"{identifier}_training_plot.png")
+    
     plt.savefig(save_path, dpi=300)
     print(f"✓ Seq2Seq training results plot saved to '{save_path}'")
     plt.close()
 
 
-def plot_error_analysis_summary():
-    """
-    Scans all error analysis CSV files in the workspace and plots comparative error volumes.
-    
-    What it shows:
-      - A comparative bar chart showing the total count of failed/mispredicted test samples 
-        logged across each error analysis file (`error_analysis_*.csv`).
-    """
-    error_files = glob.glob("error_analysis_*.csv")
+def plot_single_error_summary(save_path="results/plots/error_analysis_summary.png"):
+    """Helper function: Plots comparative total error volume across all error analysis CSV files."""
+    error_files = glob.glob("results/raw/error_analysis_*.csv")
     if not error_files:
         print("ℹ️ No error analysis CSV files found to plot.")
         return
@@ -192,46 +187,102 @@ def plot_error_analysis_summary():
         plt.text(bar.get_x() + bar.get_width()/2.0, yval + 0.2, int(yval), ha='center', va='bottom')
 
     plt.tight_layout()
-    save_path = "error_analysis_summary.png"
     plt.savefig(save_path, dpi=300)
     print(f"✓ Error analysis summary plot saved to '{save_path}'")
     plt.close()
 
+
+def plot_slot_error_breakdown(error_csv_path: str):
+    """
+    NEW IDEA HELPER: Scans a specific error analysis CSV file and counts 
+    which positional slots fail most frequently (Prefix, Person, Version, Root, PFSF, Suffix).
+    """
+    if not os.path.exists(error_csv_path):
+        print(f"❌ Error: {error_csv_path} not found.")
+        return
+
+    df = pd.read_csv(error_csv_path)
+    if df.empty or "Gold Segmentation" not in df.columns or "Predicted Segmentation" not in df.columns:
+        print(f"⚠️ Invalid or empty error analysis file: {error_csv_path}")
+        return
+
+    slot_error_counts = {slot: 0 for slot in SLOT_KEYS}
+
+    for _, row in df.iterrows():
+        gold_slots = parse_segmented_slots(str(row["Gold Segmentation"]))
+        pred_slots = parse_segmented_slots(str(row["Predicted Segmentation"]))
+        
+        for idx, slot_name in enumerate(SLOT_KEYS):
+            if gold_slots[idx] != pred_slots[idx]:
+                slot_error_counts[slot_name] += 1
+
+    plt.figure(figsize=(8, 4))
+    slots = list(slot_error_counts.keys())
+    errors = list(slot_error_counts.values())
+
+    bars = plt.bar(slots, errors, color="purple", alpha=0.7, width=0.5)
+    model_tag = error_csv_path.replace("error_analysis_", "").replace(".csv", "")
+    plt.title(f"Slot-Level Error Breakdown\n({model_tag})", fontweight="bold")
+    plt.xlabel("Morpheme Positional Slots")
+    plt.ylabel("Mismatched Count")
+    plt.grid(axis="y", linestyle=":", alpha=0.7)
+
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2.0, yval + 0.1, int(yval), ha='center', va='bottom')
+
+    plt.tight_layout()
+    base_name = os.path.basename(error_csv_path)
+    clean_name = base_name.replace("error_analysis_", "slot_errors_").replace(".csv", ".png")
+    
+    save_path = os.path.join("results/plots", clean_name)
+    plt.savefig(save_path, dpi=300)
+    print(f"✓ Slot error breakdown plot saved to '{save_path}'")
+    plt.close()
+
+
+# ==========================================
+# AUTOMATED DISCOVERY & EXECUTION PIPELINE
+# ==========================================
 
 if __name__ == "__main__":
     print("=" * 60)
     print("AUTO-DISCOVERING ARTIFACTS AND GENERATING RELEVANT PLOTS")
     print("=" * 60)
 
-    # 1. Master benchmark comparison from experiment_results.json
-    if os.path.exists("experiment_results.json"):
-        print("\n[1/4] Generating Cross-Model Benchmark Comparison...")
-        plot_cross_model_comparison("experiment_results.json")
+    # 1. Master benchmark comparison
+
+    if os.path.exists("results/combined_experiment_results.json"):
+        print("\n[1/5] Generating Cross-Model Benchmark Comparison...")
+        plot_single_cross_model_comparison("results/combined_experiment_results.json")
     else:
-        print("\n[1/4] Skipping cross-model comparison ('experiment_results.json' not found).")
+        print("\n[1/5] Skipping cross-model comparison ('experiment_results.json' not found).")
 
-    # 2. Error volume comparison from error_analysis_*.csv files
-    print("\n[2/4] Generating Error Analysis Summary Chart...")
-    plot_error_analysis_summary()
+    # 2. Error volume comparison
+    print("\n[2/5] Generating Error Analysis Summary Chart...")
+    plot_single_error_summary()
 
-    # 3. Custom PyTorch Tagger training curves from history json files
-    tagger_histories = glob.glob("results_tagger_*_history.json")
+    # 3. New Slot-Level Error Breakdown for each error CSV
+    error_files = glob.glob("results/raw/error_analysis_*.csv")
+    if error_files:
+        print(f"\n[3/5] Generating Slot-Level Error Breakdowns for {len(error_files)} error file(s)...")
+        for ef in error_files:
+            plot_slot_error_breakdown(ef)
+    else:
+        print("\n[3/5] No error analysis files found for slot breakdowns.")
+
+    # 4. Custom PyTorch Tagger training curves
+    tagger_histories = glob.glob("results/raw/results_tagger_*_history.json")
     if tagger_histories:
-        print(f"\n[3/4] Found {len(tagger_histories)} PyTorch Tagger history file(s). Plotting...")
+        print(f"\n[4/5] Found {len(tagger_histories)} PyTorch Tagger history file(s). Plotting...")
         for th in tagger_histories:
-            plot_tagger_history(th)
+            plot_single_tagger_history(th)
     else:
-        print("\n[3/4] No PyTorch tagger history files found.")
+        print("\n[4/5] No PyTorch tagger history files found.")
 
-    # 4. Hugging Face Seq2Seq loss & evaluation curves from trainer states
-    seq2seq_dirs = [d for d in glob.glob("results_seq2seq_*") if os.path.isdir(d)]
-    if seq2seq_dirs:
-        print(f"\n[4/4] Found {len(seq2seq_dirs)} Seq2Seq result directory/directories. Plotting...")
-        for sd in seq2seq_dirs:
-            if os.path.exists(os.path.join(sd, "trainer_state.json")):
-                plot_training_results(sd)
-    else:
-        print("\n[4/4] No Seq2Seq result directories found.")
+    # 5. Hugging Face Seq2Seq loss & evaluation curves
+    print(f"\n[5/5] Found trainer_state_group6.json. Plotting...")
+    plot_single_seq2seq_training("results/raw/trainer_state_group6.json")
 
     print("\n" + "=" * 60)
     print("PLOT GENERATION COMPLETE!")
