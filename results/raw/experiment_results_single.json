@@ -1,0 +1,13 @@
+[
+    {
+        "Model Architecture": "google/byt5-small",
+        "Strategy / Mode": "single",
+        "Exact Match (%)": 94.83,
+        "Norm Edit Dist": 0.023,
+        "Slot Accuracy (%)": 97.23,
+        "Morpheme Precision (%)": 96.62,
+        "Morpheme Recall (%)": 98.42,
+        "Morpheme F1 (%)": 97.51,
+        "Training Time (s)": 4139.4
+    }
+]

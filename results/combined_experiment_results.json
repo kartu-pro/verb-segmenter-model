@@ -1,0 +1,69 @@
+
+[
+    {
+        "Model Architecture": "BiLSTM-Meta",
+        "Strategy / Mode": "boundaries",
+        "Exact Match (%)": 81.36,
+        "Norm Edit Dist": 0.0394,
+        "Slot Accuracy (%)": 91.61,
+        "Morpheme Precision (%)": 91.36,
+        "Morpheme Recall (%)": 91.78,
+        "Morpheme F1 (%)": 91.57,
+        "Training Time (s)": 175.8
+    },
+    {
+        "Model Architecture": "BiLSTM-Meta",
+        "Strategy / Mode": "bio",
+        "Exact Match (%)": 86.56,
+        "Norm Edit Dist": 0.0372,
+        "Slot Accuracy (%)": 94.88,
+        "Morpheme Precision (%)": 94.28,
+        "Morpheme Recall (%)": 95.58,
+        "Morpheme F1 (%)": 94.93,
+        "Training Time (s)": 134.5
+    },
+    {
+        "Model Architecture": "BiLSTM-Meta-CRF",
+        "Strategy / Mode": "boundaries",
+        "Exact Match (%)": 82.99,
+        "Norm Edit Dist": 0.0375,
+        "Slot Accuracy (%)": 93.38,
+        "Morpheme Precision (%)": 92.74,
+        "Morpheme Recall (%)": 93.83,
+        "Morpheme F1 (%)": 93.28,
+        "Training Time (s)": 655.7
+    },
+    {
+        "Model Architecture": "BiLSTM-Meta-CRF",
+        "Strategy / Mode": "bio",
+        "Exact Match (%)": 90.72,
+        "Norm Edit Dist": 0.0318,
+        "Slot Accuracy (%)": 95.66,
+        "Morpheme Precision (%)": 94.83,
+        "Morpheme Recall (%)": 96.76,
+        "Morpheme F1 (%)": 95.79,
+        "Training Time (s)": 626.8
+    },
+    {
+        "Model Architecture": "google/byt5-small",
+        "Strategy / Mode": "single",
+        "Exact Match (%)": 94.83,
+        "Norm Edit Dist": 0.023,
+        "Slot Accuracy (%)": 97.23,
+        "Morpheme Precision (%)": 96.62,
+        "Morpheme Recall (%)": 98.42,
+        "Morpheme F1 (%)": 97.51,
+        "Training Time (s)": 20695
+    },
+    {
+        "Model Architecture": "google/byt5-small",
+        "Strategy / Mode": "group6",
+        "Exact Match (%)": 88.13,
+        "Norm Edit Dist": 0.0232,
+        "Slot Accuracy (%)": 96.51,
+        "Morpheme Precision (%)": 95.79,
+        "Morpheme Recall (%)": 97.82,
+        "Morpheme F1 (%)": 96.79,
+        "Training Time (s)": 13725
+    }
+]
